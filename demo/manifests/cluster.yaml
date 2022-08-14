@@ -1,0 +1,23 @@
+---
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # Prometheus
+      - containerPort: 30000
+        hostPort: 9090
+        listenAddress: "0.0.0.0"
+        protocol: tcp
+
+      # Grafana
+      - containerPort: 30001
+        hostPort: 3000
+        listenAddress: "0.0.0.0"
+        protocol: tcp
+
+      # Linkerd's frontend
+      - containerPort: 30002
+        hostPort: 8080
+        listenAddress: "0.0.0.0"
+        protocol: tcp

@@ -1,0 +1,28 @@
+---
+testFramework:
+  enabled: false
+
+service:
+  enabled: true
+  type: NodePort
+  nodePort: 30001
+
+persistence:
+  enabled: true
+  storageClassName: standard
+
+adminUser: admin
+adminPassword: admin
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus.default
+        access: proxy
+        isDefault: true
+
+plugins:
+  - hamedkarbasi93-nodegraphapi-datasource

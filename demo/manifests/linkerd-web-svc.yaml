@@ -1,0 +1,17 @@
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: web-external
+  namespace: linkerd-viz
+spec:
+  type: NodePort
+  selector:
+    linkerd.io/extension: viz
+    component: web
+  ports:
+    - name: http
+      port: 8084
+      targetPort: 8084
+      nodePort: 30002
+
