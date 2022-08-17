@@ -14,7 +14,7 @@ spec:
         app: linkerd-grafana-graph
     spec:
       containers:
-        - name: flask
+        - name: nodegraph-server
           image: linkerd-grafana-graph:latest
           imagePullPolicy: Never
           ports:
