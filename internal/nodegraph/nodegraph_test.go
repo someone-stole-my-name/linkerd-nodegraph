@@ -33,7 +33,7 @@ var fields = nodegraph.NodeFields{
 }
 
 func Test_NodeFieldsMarshall(t *testing.T) {
-	const expected = `{"node_fields":[{"field_name":"foo","type":"string"},{"field_name":"bar","type":"number"},{"field_name":"arc__foo","type":"number","color":"foo","displayName":"foo"},{"field_name":"arc__bar","type":"string","color":"bar","displayName":"bar"}],"edge_fields":[{"field_name":"foo","type":"string"},{"field_name":"bar","type":"number"}]}`
+	const expected = `{"nodes_fields":[{"field_name":"foo","type":"string"},{"field_name":"bar","type":"number"},{"field_name":"arc__foo","type":"number","color":"foo","displayName":"foo"},{"field_name":"arc__bar","type":"string","color":"bar","displayName":"bar"}],"edges_fields":[{"field_name":"foo","type":"string"},{"field_name":"bar","type":"number"}]}`
 	b, err := json.Marshal(fields)
 	if err != nil {
 		log.Fatal(err)
