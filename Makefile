@@ -11,12 +11,9 @@ clean:
 test:
 	$(GOTEST) -v -race -cover ./...
 
-vendor:
-	$(GOCMD) mod vendor
-
 build:
 	mkdir -p out/bin
-	CGO_ENABLED=0 $(GOCMD) build -mod vendor -buildvcs=false -o out/bin/nodegraph-server ./cmd/nodegraph-server
+	CGO_ENABLED=0 $(GOCMD) build -buildvcs=false -o out/bin/nodegraph-server ./cmd/nodegraph-server
 
 setup-buildx:
 	curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
