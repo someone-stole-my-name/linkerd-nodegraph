@@ -23,6 +23,16 @@ datasources:
         url: http://prometheus.default
         access: proxy
         isDefault: true
+      - name: Linkerd Node graph
+        type: hamedkarbasi93-nodegraphapi-datasource
+        access: proxy
+        url: http://linkerd-grafana-graph.default
 
 plugins:
   - hamedkarbasi93-nodegraphapi-datasource
+
+grafana.ini:
+  auth.anonymous:
+    enabled: true
+    org_name: Main Org.
+    org_role: Admin
