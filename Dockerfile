@@ -1,12 +1,10 @@
-FROM golang:latest AS build
+FROM golang:1.19 AS build
 
 WORKDIR /app
 COPY . .
-RUN CGO_ENABLED=0 \
-  go build \
-  -o /bin/nodegraph-server cmd/nodegraph-server/main.go
+RUN make build
 
 FROM scratch
-COPY --from=build /bin/nodegraph-server /nodegraph-server
+COPY --from=build /app/out/bin/nodegraph-server /nodegraph-server
 CMD ["/nodegraph-server"]
 
