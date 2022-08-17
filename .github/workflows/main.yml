@@ -34,5 +34,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - run: |
+          make docker-vendor
           make docker-push \
             DOCKER_EXTRA_ARGS="-v ${HOME}/.docker:/root/.docker"
