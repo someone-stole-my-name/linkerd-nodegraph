@@ -26,7 +26,8 @@ datasources:
       - name: Linkerd Node graph
         type: hamedkarbasi93-nodegraphapi-datasource
         access: proxy
-        url: http://linkerd-grafana-graph.default
+        jsonData:
+          url: http://linkerd-grafana-graph.default
 
 plugins:
   - hamedkarbasi93-nodegraphapi-datasource
