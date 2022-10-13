@@ -9,43 +9,45 @@ import (
 type resourceType int
 
 const (
-	deploymentResourceType = resourceType(iota)
-	statefulsetResourceType
+	DeploymentResourceType = resourceType(iota)
+	StatefulsetResourceType
 )
 
 var (
 	resourceTypes = []resourceType{
-		deploymentResourceType,
-		statefulsetResourceType,
+		DeploymentResourceType,
+		StatefulsetResourceType,
 	}
 )
 
-type resource struct {
-	name         model.LabelValue
-	namespace    model.LabelValue
-	resourceType resourceType
+type Resource struct {
+	Name         model.LabelValue
+	Namespace    model.LabelValue
+	ResourceType resourceType
 }
 
 func (rt resourceType) String() string {
 	switch rt {
-	case deploymentResourceType:
+	case DeploymentResourceType:
 		return "deployment"
-	case statefulsetResourceType:
+	case StatefulsetResourceType:
 		return "statefulset"
 	}
+
 	return "unknown"
 }
 
 func (rt resourceType) Label() model.LabelName {
 	switch rt {
-	case deploymentResourceType:
+	case DeploymentResourceType:
 		return deploymentLabel
-	case statefulsetResourceType:
+	case StatefulsetResourceType:
 		return statefulsetLabel
 	}
+
 	return model.LabelName("unknown")
 }
 
-func (r resource) id() string {
-	return fmt.Sprintf("%s__%s__%s", r.namespace, r.name, r.resourceType.String())
+func (r Resource) id() string {
+	return fmt.Sprintf("%s__%s__%s", r.Namespace, r.Name, r.ResourceType.String())
 }

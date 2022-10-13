@@ -34,16 +34,19 @@ var fields = nodegraph.NodeFields{
 
 func Test_NodeFieldsMarshall(t *testing.T) {
 	const expected = `{"nodes_fields":[{"field_name":"foo","type":"string"},{"field_name":"bar","type":"number"},{"field_name":"arc__foo","type":"number","color":"foo","displayName":"foo"},{"field_name":"arc__bar","type":"string","color":"bar","displayName":"bar"}],"edges_fields":[{"field_name":"foo","type":"string"},{"field_name":"bar","type":"number"}]}`
+
 	b, err := json.Marshal(fields)
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	assert.Equal(t, expected, string(b))
 }
 
 func Test_GraphAdd(t *testing.T) {
 	const expected = `{"nodes":[{"arc__bar":"baz","arc__foo":0.2,"bar":1,"foo":"bar"}],"edges":[{"bar":1,"foo":"bar"}]}`
-	var g = nodegraph.Graph{Spec: fields}
+
+	g := nodegraph.Graph{Spec: fields}
 	assert.Nil(t,
 		g.AddEdge(map[string]interface{}{
 			"foo": "bar",
@@ -68,9 +71,11 @@ func Test_GraphAdd(t *testing.T) {
 			"arc__foo": "0.2", // The spec defines arc__foo as a number
 			"arc__bar": "baz",
 		}))
+
 	b, err := json.Marshal(g)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	assert.Equal(t, expected, string(b))
 }

@@ -7,8 +7,13 @@ import (
 	"github.com/prometheus/common/model"
 )
 
-type GraphSource interface {
-	Query(ctx context.Context, query string) (model.Vector, error)
+type graphSource interface {
+	Nodes(ctx context.Context) ([]Node, error)
+	Edges(ctx context.Context) ([]Edge, error)
+}
+
+type Stats struct {
+	Server graphSource
 }
 
 var (
@@ -48,35 +53,35 @@ var (
 	dstStatefulsetLabel = model.LabelName("dst_statefulset")
 )
 
-type Stats struct {
-	Server GraphSource
-}
-
 func (m Stats) Graph(ctx context.Context) (*nodegraph.Graph, error) {
 	graph := nodegraph.Graph{Spec: GraphSpec}
 
-	nodes, err := m.nodes(ctx)
+	nodes, err := m.Server.Nodes(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	edges, err := m.edges(ctx)
+	edges, err := m.Server.Edges(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	seenIds := map[string]bool{}
+
 	for _, node := range nodes {
 		nodegraphNode := node.nodegraphNode()
+
 		err := graph.AddNode(nodegraphNode)
 		if err != nil {
 			return nil, err
 		}
-		seenIds[node.resource.id()] = true
+
+		seenIds[node.Resource.id()] = true
 	}
 
 	for _, edge := range edges {
 		nographEdge := edge.nodegraphEdge()
+
 		err := graph.AddEdge(nographEdge)
 		if err != nil {
 			return nil, err
@@ -84,9 +89,9 @@ func (m Stats) Graph(ctx context.Context) (*nodegraph.Graph, error) {
 
 		// if we don't have a node for the source/destination (ie not meshed stuff)
 		// add a node for it
-		for _, resource := range []resource{edge.source, edge.destination} {
+		for _, resource := range []Resource{edge.Source, edge.Destination} {
 			if _, ok := seenIds[resource.id()]; !ok {
-				err := graph.AddNode(node{resource: resource}.nodegraphNode())
+				err := graph.AddNode(Node{Resource: resource}.nodegraphNode())
 				if err != nil {
 					return nil, err
 				}

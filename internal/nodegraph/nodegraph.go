@@ -26,8 +26,10 @@ type NodeFields struct {
 	Edge []Field `json:"edges_fields"`
 }
 
-type Node map[string]interface{}
-type Edge map[string]interface{}
+type (
+	Node map[string]interface{}
+	Edge map[string]interface{}
+)
 
 type Graph struct {
 	Spec  NodeFields `json:"-"`
@@ -42,6 +44,7 @@ func (t FieldType) String() string {
 	case FieldTypeNumber:
 		return "number"
 	}
+
 	return "unknown"
 }
 
@@ -55,7 +58,9 @@ func (g *Graph) AddNode(n ...Node) error {
 			return ErrInvalidGraphItem
 		}
 	}
+
 	g.Nodes = append(g.Nodes, n...)
+
 	return nil
 }
 
@@ -65,7 +70,9 @@ func (g *Graph) AddEdge(e ...Edge) error {
 			return ErrInvalidGraphItem
 		}
 	}
+
 	g.Edges = append(g.Edges, e...)
+
 	return nil
 }
 
@@ -74,6 +81,7 @@ func validItem(item map[string]interface{}, fields []Field) bool {
 		if _, ok := item[field.Name]; !ok {
 			return false
 		}
+
 		switch field.Type {
 		case FieldTypeString:
 			if _, ok := item[field.Name].(string); !ok {
@@ -83,17 +91,22 @@ func validItem(item map[string]interface{}, fields []Field) bool {
 			if _, ok := item[field.Name].(int); ok {
 				break
 			}
+
 			if _, ok := item[field.Name].(int32); ok {
 				break
 			}
+
 			if _, ok := item[field.Name].(float32); ok {
 				break
 			}
+
 			if _, ok := item[field.Name].(float64); ok {
 				break
 			}
+
 			return false
 		}
 	}
+
 	return true
 }
