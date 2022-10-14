@@ -3,6 +3,7 @@ package nodegraph
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 )
 
 var ErrInvalidGraphItem = errors.New("item does not conforms to spec")
@@ -15,15 +16,15 @@ const (
 )
 
 type Field struct {
-	Name        string    `json:"field_name"`
+	Name        string    `json:"field_name"` //nolint:tagliatelle
 	Type        FieldType `json:"type"`
 	Color       string    `json:"color,omitempty"`
 	DisplayName string    `json:"displayName,omitempty"`
 }
 
 type NodeFields struct {
-	Node []Field `json:"nodes_fields"`
-	Edge []Field `json:"edges_fields"`
+	Node []Field `json:"nodes_fields"` //nolint:tagliatelle
+	Edge []Field `json:"edges_fields"` //nolint:tagliatelle
 }
 
 type (
@@ -37,8 +38,8 @@ type Graph struct {
 	Edges []Edge     `json:"edges"`
 }
 
-func (t FieldType) String() string {
-	switch t {
+func (f FieldType) String() string {
+	switch f {
 	case FieldTypeString:
 		return "string"
 	case FieldTypeNumber:
@@ -49,29 +50,34 @@ func (t FieldType) String() string {
 }
 
 func (f FieldType) MarshalJSON() ([]byte, error) {
-	return json.Marshal(f.String())
+	encoded, err := json.Marshal(f.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshall '%s': %w", f.String(), err)
+	}
+
+	return encoded, nil
 }
 
-func (g *Graph) AddNode(n ...Node) error {
-	for _, node := range n {
+func (g *Graph) AddNode(nodes ...Node) error {
+	for _, node := range nodes {
 		if !validItem(node, g.Spec.Node) {
 			return ErrInvalidGraphItem
 		}
 	}
 
-	g.Nodes = append(g.Nodes, n...)
+	g.Nodes = append(g.Nodes, nodes...)
 
 	return nil
 }
 
-func (g *Graph) AddEdge(e ...Edge) error {
-	for _, edge := range e {
+func (g *Graph) AddEdge(edges ...Edge) error {
+	for _, edge := range edges {
 		if !validItem(edge, g.Spec.Edge) {
 			return ErrInvalidGraphItem
 		}
 	}
 
-	g.Edges = append(g.Edges, e...)
+	g.Edges = append(g.Edges, edges...)
 
 	return nil
 }

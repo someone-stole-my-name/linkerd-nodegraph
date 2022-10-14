@@ -2,6 +2,7 @@ package linkerd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -10,6 +11,8 @@ import (
 	prom "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 )
+
+var ErrNotAVector = errors.New("expected vector")
 
 type promAPI interface {
 	Query(ctx context.Context, query string, ts time.Time, opts ...prom.Option) (model.Value, prom.Warnings, error)
@@ -24,7 +27,7 @@ func NewPromGraphSource(address string) (*PromGraphSource, error) {
 		Address: address,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error creating prometheus graphsource: %w", err)
 	}
 
 	return &PromGraphSource{
@@ -35,18 +38,18 @@ func NewPromGraphSource(address string) (*PromGraphSource, error) {
 func (p PromGraphSource) query(ctx context.Context, q string) (model.Vector, error) {
 	res, warn, err := p.Client.Query(ctx, q, time.Now())
 	if err != nil {
-		return nil, fmt.Errorf("Query failed: %q: %w", q, err)
+		return nil, fmt.Errorf("query failed: %q: %w", q, err)
 	}
 
 	if warn != nil {
 		log.Printf("%v", warn)
 	}
 
-	if res.Type() != model.ValVector {
-		return nil, fmt.Errorf("Expected Vector but got: %s", res.Type())
+	if vector, ok := res.(model.Vector); ok {
+		return vector, nil
 	}
 
-	return res.(model.Vector), nil
+	return nil, fmt.Errorf("received '%s': %w", res.Type(), ErrNotAVector)
 }
 
 func (p PromGraphSource) Nodes(ctx context.Context) (*[]Node, error) {
@@ -59,15 +62,15 @@ func (p PromGraphSource) Nodes(ctx context.Context) (*[]Node, error) {
 			return nil, err
 		}
 
-		for _, v := range vector {
-			value := float64(v.Value)
+		for _, sample := range vector {
+			value := float64(sample.Value)
 
 			nodes = append(nodes, Node{
 				SuccessRate: &value,
 				Resource: Resource{
-					Namespace:    v.Metric[namespaceLabel],
+					Namespace:    sample.Metric[namespaceLabel],
 					ResourceType: resourceType,
-					Name:         v.Metric[resourceType.Label()],
+					Name:         sample.Metric[resourceType.Label()],
 				},
 			})
 		}
@@ -95,39 +98,39 @@ func (p PromGraphSource) Edges(ctx context.Context) (*[]Edge, error) {
 	return &e, nil
 }
 
-func parseSample(s *model.Sample) *Edge {
-	e := Edge{}
+func parseSample(sample *model.Sample) *Edge {
+	edge := Edge{}
 
-	if v, ok := s.Metric[deploymentLabel]; ok {
-		e.Source.ResourceType = DeploymentResourceType
-		e.Source.Name = v
-	} else if v, ok := s.Metric[statefulsetLabel]; ok {
-		e.Source.ResourceType = StatefulsetResourceType
-		e.Source.Name = v
+	if v, ok := sample.Metric[deploymentLabel]; ok {
+		edge.Source.ResourceType = DeploymentResourceType
+		edge.Source.Name = v
+	} else if v, ok := sample.Metric[statefulsetLabel]; ok {
+		edge.Source.ResourceType = StatefulsetResourceType
+		edge.Source.Name = v
 	} else {
 		return nil
 	}
 
-	if v, ok := s.Metric[dstDeploymentLabel]; ok {
-		e.Destination.ResourceType = DeploymentResourceType
-		e.Destination.Name = v
-	} else if v, ok := s.Metric[dstStatefulsetLabel]; ok {
-		e.Destination.ResourceType = StatefulsetResourceType
-		e.Destination.Name = v
+	if v, ok := sample.Metric[dstDeploymentLabel]; ok {
+		edge.Destination.ResourceType = DeploymentResourceType
+		edge.Destination.Name = v
+	} else if v, ok := sample.Metric[dstStatefulsetLabel]; ok {
+		edge.Destination.ResourceType = StatefulsetResourceType
+		edge.Destination.Name = v
 	} else {
 		return nil
 	}
 
-	if _, ok := s.Metric[namespaceLabel]; !ok {
+	if _, ok := sample.Metric[namespaceLabel]; !ok {
 		return nil
 	}
 
-	if _, ok := s.Metric[dstNamespaceLabel]; !ok {
+	if _, ok := sample.Metric[dstNamespaceLabel]; !ok {
 		return nil
 	}
 
-	e.Source.Namespace = s.Metric[namespaceLabel]
-	e.Destination.Namespace = s.Metric[dstNamespaceLabel]
+	edge.Source.Namespace = sample.Metric[namespaceLabel]
+	edge.Destination.Namespace = sample.Metric[dstNamespaceLabel]
 
-	return &e
+	return &edge
 }

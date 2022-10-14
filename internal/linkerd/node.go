@@ -28,7 +28,7 @@ func (n Node) failed() float64 {
 
 func (n Node) percent() string {
 	if n.SuccessRate != nil {
-		return fmt.Sprintf("%.2f%%", *n.SuccessRate*100)
+		return fmt.Sprintf("%.2f%%", *n.SuccessRate*100) //nolint:gomnd
 	}
 
 	return "N/A"
