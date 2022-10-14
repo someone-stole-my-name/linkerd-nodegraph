@@ -49,7 +49,7 @@ func (p PromGraphSource) query(ctx context.Context, q string) (model.Vector, err
 	return res.(model.Vector), nil
 }
 
-func (p PromGraphSource) Nodes(ctx context.Context) ([]Node, error) {
+func (p PromGraphSource) Nodes(ctx context.Context) (*[]Node, error) {
 	nodes := []Node{}
 	queryFormat := `sum(irate(response_total{classification="success", direction="inbound", %[1]s!="", namespace!=""}[5m])) by (namespace, %[1]s) / sum(irate(response_total{direction="inbound", %[1]s!="", namespace!=""}[5m])) by (namespace, %[1]s) >= 0`
 
@@ -73,10 +73,10 @@ func (p PromGraphSource) Nodes(ctx context.Context) ([]Node, error) {
 		}
 	}
 
-	return nodes, nil
+	return &nodes, nil
 }
 
-func (p PromGraphSource) Edges(ctx context.Context) ([]Edge, error) {
+func (p PromGraphSource) Edges(ctx context.Context) (*[]Edge, error) {
 	e := []Edge{}
 
 	vector, err := p.query(ctx, "sum(rate(response_total[5m])) by (deployment, statefulset, namespace, dst_namespace, dst_deployment, dst_statefulset)")
@@ -92,7 +92,7 @@ func (p PromGraphSource) Edges(ctx context.Context) ([]Edge, error) {
 		}
 	}
 
-	return e, nil
+	return &e, nil
 }
 
 func parseSample(s *model.Sample) *Edge {

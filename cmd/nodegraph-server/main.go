@@ -8,7 +8,11 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/gorilla/schema"
 )
+
+var decoder = schema.NewDecoder()
 
 func main() {
 	prometheusAddr := flag.String("prometheus-addr", "http://prometheus.default", "Address of the Prometheus server")
@@ -23,12 +27,10 @@ func main() {
 	http.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-
 	http.HandleFunc("/api/graph/fields", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(linkerd.GraphSpec)
 	})
-
 	http.HandleFunc("/api/graph/data", data(linkerd.Stats{Server: prom}))
 
 	err = http.ListenAndServe(*listenAddr, func(handler http.Handler) http.Handler {
@@ -44,14 +46,27 @@ func main() {
 
 func data(stats linkerd.Stats) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		graph, err := stats.Graph(ctx)
+		var params linkerd.Parameters
+
+		err := decoder.Decode(&params, r.URL.Query())
 		if err != nil {
 			log.Printf("%s", err)
 			w.WriteHeader(http.StatusInternalServerError)
+
 			return
 		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		graph, err := stats.Graph(ctx, params)
+		if err != nil {
+			log.Printf("%s", err)
+			w.WriteHeader(http.StatusInternalServerError)
+
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(graph)
 	}

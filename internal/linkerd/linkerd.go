@@ -8,12 +8,19 @@ import (
 )
 
 type graphSource interface {
-	Nodes(ctx context.Context) ([]Node, error)
-	Edges(ctx context.Context) ([]Edge, error)
+	Nodes(ctx context.Context) (*[]Node, error)
+	Edges(ctx context.Context) (*[]Edge, error)
 }
 
 type Stats struct {
 	Server graphSource
+}
+
+type Parameters struct {
+	Depth           int      `schema:"depth"`
+	IgnoreResources []string `schema:"ignore_resources"`
+	NoOrphans       bool     `schema:"no_orphans"`
+	RootResource    string   `schema:"root_resource"`
 }
 
 var (
@@ -53,7 +60,7 @@ var (
 	dstStatefulsetLabel = model.LabelName("dst_statefulset")
 )
 
-func (m Stats) Graph(ctx context.Context) (*nodegraph.Graph, error) {
+func (m Stats) Graph(ctx context.Context, parameters Parameters) (*nodegraph.Graph, error) {
 	graph := nodegraph.Graph{Spec: GraphSpec}
 
 	nodes, err := m.Server.Nodes(ctx)
@@ -66,9 +73,14 @@ func (m Stats) Graph(ctx context.Context) (*nodegraph.Graph, error) {
 		return nil, err
 	}
 
+	err = runFilters(edges, nodes, parameters)
+	if err != nil {
+		return nil, err
+	}
+
 	seenIds := map[string]bool{}
 
-	for _, node := range nodes {
+	for _, node := range *nodes {
 		nodegraphNode := node.nodegraphNode()
 
 		err := graph.AddNode(nodegraphNode)
@@ -79,7 +91,7 @@ func (m Stats) Graph(ctx context.Context) (*nodegraph.Graph, error) {
 		seenIds[node.Resource.id()] = true
 	}
 
-	for _, edge := range edges {
+	for _, edge := range *edges {
 		nographEdge := edge.nodegraphEdge()
 
 		err := graph.AddEdge(nographEdge)
@@ -100,4 +112,128 @@ func (m Stats) Graph(ctx context.Context) (*nodegraph.Graph, error) {
 	}
 
 	return &graph, nil
+}
+
+func removeOrphans(edges *[]Edge, nodes *[]Node) {
+	seenIds := map[string]bool{}
+	newNodes := []Node{}
+
+	for _, edge := range *edges {
+		seenIds[edge.Destination.id()] = true
+		seenIds[edge.Source.id()] = true
+	}
+
+	for _, node := range *nodes {
+		if _, ok := seenIds[node.Resource.id()]; ok {
+			newNodes = append(newNodes, node)
+		}
+	}
+
+	*nodes = newNodes
+}
+
+func removeId(id string, edges *[]Edge, nodes *[]Node) {
+	newNodes := []Node{}
+	newEdges := []Edge{}
+
+	for _, node := range *nodes {
+		if node.Resource.id() != id {
+			newNodes = append(newNodes, node)
+		}
+	}
+
+	for _, edge := range *edges {
+		if edge.Source.id() != id && edge.Destination.id() != id {
+			newEdges = append(newEdges, edge)
+		}
+	}
+
+	*nodes = newNodes
+	*edges = newEdges
+}
+
+func setRoot(id string, depth int, edges *[]Edge, nodes *[]Node) {
+	rootExists := false
+
+	for _, node := range *nodes {
+		if node.Resource.id() == id {
+			rootExists = true
+
+			break
+		}
+	}
+
+	if !rootExists {
+		return
+	}
+
+	currentDepth := 0
+	connectedNodeIds := map[string]bool{}
+	connectedNodeIds[id] = true
+
+	for currentDepth != depth {
+		iterationNodeIds := map[string]bool{}
+		currentDepth++
+
+		for root := range connectedNodeIds {
+			ids := findNodesConnectedTo(root, *edges)
+			for _, id := range ids {
+				iterationNodeIds[id] = true
+			}
+		}
+
+		for id := range iterationNodeIds {
+			connectedNodeIds[id] = true
+		}
+	}
+
+	for _, node := range *nodes {
+		if _, ok := connectedNodeIds[node.Resource.id()]; !ok {
+			removeId(node.Resource.id(), edges, nodes)
+		}
+	}
+}
+
+func findNodesConnectedTo(id string, edges []Edge) []string {
+	nodeIdsMap := map[string]bool{}
+	nodeIds := []string{}
+
+	for _, edge := range edges {
+		if edge.Source.id() == id {
+			if _, ok := nodeIdsMap[edge.Destination.id()]; !ok {
+				nodeIdsMap[edge.Destination.id()] = true
+			}
+		} else if edge.Destination.id() == id {
+			if _, ok := nodeIdsMap[edge.Source.id()]; !ok {
+				nodeIdsMap[edge.Source.id()] = true
+			}
+		}
+	}
+
+	for k := range nodeIdsMap {
+		nodeIds = append(nodeIds, k)
+	}
+
+	return nodeIds
+}
+
+func runFilters(edges *[]Edge, nodes *[]Node, params Parameters) error {
+	if params.NoOrphans {
+		removeOrphans(edges, nodes)
+	}
+
+	for _, idToIgnore := range params.IgnoreResources {
+		removeId(idToIgnore, edges, nodes)
+	}
+
+	if params.RootResource != "" {
+		depth := 1
+		if params.Depth != 0 {
+			depth = params.Depth
+		}
+
+		setRoot(params.RootResource, depth, edges, nodes)
+	}
+
+	return nil
 }

@@ -13,12 +13,10 @@ const (
 	StatefulsetResourceType
 )
 
-var (
-	resourceTypes = []resourceType{
-		DeploymentResourceType,
-		StatefulsetResourceType,
-	}
-)
+var resourceTypes = []resourceType{
+	DeploymentResourceType,
+	StatefulsetResourceType,
+}
 
 type Resource struct {
 	Name         model.LabelValue

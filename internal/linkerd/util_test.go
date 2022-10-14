@@ -15,9 +15,10 @@ type testCase struct {
 	meta                    string
 	prometheusEdgesResponse []model.Vector
 	prometheusNodesResponse []model.Vector
-	edgesExpect             []linkerd.Edge
-	nodesExpect             []linkerd.Node
+	edgesExpect             *[]linkerd.Edge
+	nodesExpect             *[]linkerd.Node
 	graphExpect             nodegraph.Graph
+	graphParams             linkerd.Parameters
 }
 
 type outputPromMock struct {
@@ -43,9 +44,10 @@ var (
 	testCases = []testCase{emojivoto}
 
 	emojivoto = testCase{
-		name: "emojivoto",
-		meta: "mocks a mesh with emojivoto app",
-		nodesExpect: []linkerd.Node{
+		name:        "emojivoto",
+		meta:        "mocks a mesh with emojivoto app",
+		graphParams: linkerd.Parameters{},
+		nodesExpect: &[]linkerd.Node{
 			{
 				Resource:    linkerd.Resource{Name: "emoji", Namespace: "emojivoto", ResourceType: linkerd.DeploymentResourceType},
 				SuccessRate: _float64(1),
@@ -63,7 +65,7 @@ var (
 				SuccessRate: _float64(0.81),
 			},
 		},
-		edgesExpect: []linkerd.Edge{
+		edgesExpect: &[]linkerd.Edge{
 			{
 				Source: linkerd.Resource{
 					Name:         "vote-bot",

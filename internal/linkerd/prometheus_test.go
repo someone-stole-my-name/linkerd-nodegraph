@@ -10,13 +10,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func edgesFromVec(v []model.Vector) ([]linkerd.Edge, error) {
+func edgesFromVec(v []model.Vector) (*[]linkerd.Edge, error) {
 	return linkerd.PromGraphSource{
 		Client: &outputPromMock{output: v},
 	}.Edges(context.TODO())
 }
 
-func nodesFromVec(v []model.Vector) ([]linkerd.Node, error) {
+func nodesFromVec(v []model.Vector) (*[]linkerd.Node, error) {
 	return linkerd.PromGraphSource{
 		Client: &outputPromMock{output: v},
 	}.Nodes(context.TODO())
