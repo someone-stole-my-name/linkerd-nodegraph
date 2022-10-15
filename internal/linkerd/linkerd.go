@@ -116,6 +116,34 @@ func addUnmeshed(edges *[]Edge, nodes *[]Node) {
 	}
 }
 
+func cleanupUnmeshed(edges *[]Edge, nodes *[]Node) {
+	seenIds := map[string]bool{}
+	newEdges := []Edge{}
+
+	for _, node := range *nodes {
+		seenIds[node.Resource.id()] = true
+	}
+
+	for _, edge := range *edges {
+		validSource := false
+		validDestination := false
+
+		if _, ok := seenIds[edge.Source.id()]; ok {
+			validSource = true
+		}
+
+		if _, ok := seenIds[edge.Destination.id()]; ok {
+			validDestination = true
+		}
+
+		if validDestination && validSource {
+			newEdges = append(newEdges, edge)
+		}
+	}
+
+	*edges = newEdges
+}
+
 func removeOrphans(edges *[]Edge, nodes *[]Node) {
 	seenIds := map[string]bool{}
 	newNodes := []Node{}
@@ -220,21 +248,18 @@ func findNodesConnectedTo(id string, edges []Edge) []string {
 }
 
 func runFilters(edges *[]Edge, nodes *[]Node, params Parameters) error {
+	if params.ShowUnmeshed {
+		addUnmeshed(edges, nodes)
+	} else {
+		cleanupUnmeshed(edges, nodes)
+	}
+
 	for _, idToIgnore := range params.IgnoreResources {
 		removeID(idToIgnore, edges, nodes)
 	}
 
-	if params.ShowUnmeshed {
-		addUnmeshed(edges, nodes)
-	}
-
 	if params.RootResource != "" {
-		depth := 1
-		if params.Depth != 0 {
-			depth = params.Depth
-		}
-
-		setRoot(params.RootResource, depth, edges, nodes)
+		setRoot(params.RootResource, params.Depth, edges, nodes)
 	}
 
 	if params.NoOrphans {
