@@ -3,7 +3,9 @@ GOCMD := go
 GOTEST = $(GOCMD) test -v -race -cover
 GOBUILD = $(GOCMD) build -buildvcs=false -mod vendor
 GOVERSION = 1.19
-IMAGENAME := ghcr.io/someone-stole-my-name/$(PROJECT)
+
+IMAGE_NAME := ghcr.io/someone-stole-my-name/$(PROJECT)
+IMAGE_PLATFORMS := linux/amd64,linux/arm64
 
 define DOCKER_DEPS
 	binfmt-support \
@@ -51,8 +53,16 @@ setup-buildx:
 	docker buildx use mybuilder
 
 push: setup-buildx
-	docker buildx build --platform linux/amd64 -t $(IMAGENAME):latest . --push
-	docker buildx build --platform linux/amd64 -t $(IMAGENAME):$(shell git describe --tags --abbrev=0) . --push
+	docker buildx build \
+		--build-arg GOVERSION=$(GOVERSION) \
+		--platform $(IMAGE_PLATFORMS) \
+		-t $(IMAGE_NAME):latest . --push
+	if git describe --exact-match; then	\
+			docker buildx build \
+				--build-arg GOVERSION=$(GOVERSION) \
+				--platform $(IMAGE_PLATFORMS) \
+				-t $(IMAGE_NAME):$(shell git describe --tags --abbrev=0) . --push; \
+	fi
 
 export DOCKER_DEPS
 docker-%:

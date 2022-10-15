@@ -1,7 +1,8 @@
+---
 name: Build
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   schedule:
     - cron: '5 4 * * *'
   workflow_dispatch:
@@ -15,7 +16,7 @@ jobs:
           make docker-test
   push:
     runs-on: ubuntu-latest
-    needs: [ build ]
+    needs: [build]
     permissions:
       packages: write
       contents: read

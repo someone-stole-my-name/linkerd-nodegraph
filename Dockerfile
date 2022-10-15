@@ -1,4 +1,5 @@
-FROM golang:1.19 AS build
+ARG GOVERSION=1.19
+FROM golang:${GOVERSION} AS build
 
 WORKDIR /app
 COPY . .
