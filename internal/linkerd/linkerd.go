@@ -19,8 +19,9 @@ type Stats struct {
 type Parameters struct {
 	Depth           int      `schema:"depth"`
 	IgnoreResources []string `schema:"ignore_resources"`
-	NoOrphans       bool     `schema:"no_orphans"`
 	RootResource    string   `schema:"root_resource"`
+	NoOrphans       bool     `schema:"no_orphans"`
+	ShowUnmeshed    bool     `schema:"show_unmeshed"`
 }
 
 var (
@@ -82,40 +83,37 @@ func (m Stats) Graph(ctx context.Context, parameters Parameters) (*nodegraph.Gra
 		return nil, err
 	}
 
-	seenIds := map[string]bool{}
-
 	for _, node := range *nodes {
-		nodegraphNode := node.nodegraphNode()
-
-		err := graph.AddNode(nodegraphNode)
+		err := graph.AddNode(node.nodegraphNode())
 		if err != nil {
 			return nil, err
 		}
-
-		seenIds[node.Resource.id()] = true
 	}
 
 	for _, edge := range *edges {
-		nographEdge := edge.nodegraphEdge()
-
-		err := graph.AddEdge(nographEdge)
+		err := graph.AddEdge(edge.nodegraphEdge())
 		if err != nil {
 			return nil, err
-		}
-
-		// if we don't have a node for the source/destination (ie not meshed stuff)
-		// add a node for it
-		for _, resource := range []Resource{edge.Source, edge.Destination} {
-			if _, ok := seenIds[resource.id()]; !ok {
-				err := graph.AddNode(Node{Resource: resource}.nodegraphNode())
-				if err != nil {
-					return nil, err
-				}
-			}
 		}
 	}
 
 	return &graph, nil
+}
+
+func addUnmeshed(edges *[]Edge, nodes *[]Node) {
+	seenIds := map[string]bool{}
+
+	for _, node := range *nodes {
+		seenIds[node.Resource.id()] = true
+	}
+
+	for _, edge := range *edges {
+		for _, resource := range []Resource{edge.Source, edge.Destination} {
+			if _, ok := seenIds[resource.id()]; !ok {
+				*nodes = append(*nodes, Node{Resource: resource})
+			}
+		}
+	}
 }
 
 func removeOrphans(edges *[]Edge, nodes *[]Node) {
@@ -224,6 +222,10 @@ func findNodesConnectedTo(id string, edges []Edge) []string {
 func runFilters(edges *[]Edge, nodes *[]Node, params Parameters) error {
 	for _, idToIgnore := range params.IgnoreResources {
 		removeID(idToIgnore, edges, nodes)
+	}
+
+	if params.ShowUnmeshed {
+		addUnmeshed(edges, nodes)
 	}
 
 	if params.RootResource != "" {

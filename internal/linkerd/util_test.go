@@ -45,6 +45,7 @@ var (
 		emojivotoIgnoreWebDeployment(),
 		emojivotoIgnoreEmojiDeployment(),
 		emojivotoIgnoreWebDeploymentNoOrphan(),
+		emojivotoSetRootWebDeployment(),
 	}
 
 	emojivoto = testCase{
@@ -356,12 +357,25 @@ var (
 	}
 
 	emojivotoIgnoreWebDeploymentNoOrphan = func() testCase {
+		// Ignoring web with NoOrphans is an empty graph since all nodes
+		// are connected to web with depth=1
 		newTestCase := emojivotoIgnoreWebDeployment()
 		newTestCase.name = "emojivoto ignoring web deployment without orphans"
 		newTestCase.graphParams.IgnoreResources = []string{"emojivoto__web__deployment"}
 		newTestCase.graphParams.NoOrphans = true
 		newTestCase.graphExpect.Nodes = []nodegraph.Node{}
 		newTestCase.graphExpect.Edges = []nodegraph.Edge{}
+
+		return newTestCase
+	}
+
+	emojivotoSetRootWebDeployment = func() testCase {
+		// Setting web as root has the same effect as not setting root at all
+		// since all other nodes are connected to web with depth=1
+		newTestCase := emojivoto
+		newTestCase.name = "emojivoto setting web deployment as root depth 1"
+		newTestCase.graphParams.Depth = 1
+		newTestCase.graphParams.RootResource = "emojivoto__web__deployment"
 
 		return newTestCase
 	}
