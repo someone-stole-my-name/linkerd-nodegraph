@@ -12,7 +12,6 @@ import (
 
 type testCase struct {
 	name                    string
-	meta                    string
 	prometheusEdgesResponse []model.Vector
 	prometheusNodesResponse []model.Vector
 	edgesExpect             *[]linkerd.Edge
@@ -41,11 +40,23 @@ func _float64(x float64) *float64 {
 }
 
 var (
-	testCases = []testCase{emojivoto}
+	testCases = []testCase{
+		emojivoto,
+		emojivotoIgnoreWebDeployment(),
+		emojivotoIgnoreEmojiDeployment(),
+		emojivotoIgnoreWebDeploymentNoOrphan(),
+	}
 
 	emojivoto = testCase{
+		//
+		//                                          -> emojivoto/emoji
+		//                                         -
+		//  emojivoto/vote-bot ---> emojivoto/web -
+		//                                         -
+		//                                          -> emojivoto/voting
+		//
+
 		name:        "emojivoto",
-		meta:        "mocks a mesh with emojivoto app",
 		graphParams: linkerd.Parameters{},
 		nodesExpect: &[]linkerd.Node{
 			{
@@ -104,23 +115,7 @@ var (
 			},
 		},
 		graphExpect: nodegraph.Graph{
-			Spec: nodegraph.NodeFields{
-				Node: []nodegraph.Field{
-					{Name: "id", Type: 0, Color: "", DisplayName: ""},
-					{Name: "title", Type: 0, Color: "", DisplayName: "Resource"},
-					{Name: "mainStat", Type: 0, Color: "", DisplayName: "Success Rate"},
-					{Name: "detail__type", Type: 0, Color: "", DisplayName: "Type"},
-					{Name: "detail__namespace", Type: 0, Color: "", DisplayName: "Namespace"},
-					{Name: "detail__name", Type: 0, Color: "", DisplayName: "Name"},
-					{Name: "arc__failed", Type: 1, Color: "red", DisplayName: "Failed"},
-					{Name: "arc__success", Type: 1, Color: "green", DisplayName: "Success"},
-				},
-				Edge: []nodegraph.Field{
-					{Name: "id", Type: 0, Color: "", DisplayName: ""},
-					{Name: "source", Type: 0, Color: "", DisplayName: ""},
-					{Name: "target", Type: 0, Color: "", DisplayName: ""},
-				},
-			},
+			Spec: linkerd.GraphSpec,
 			Nodes: []nodegraph.Node{
 				{
 					"arc__failed":       float64(0),
@@ -261,5 +256,113 @@ var (
 			// Second query is empty since there are no statefulsets
 			{},
 		},
+	}
+
+	emojivotoIgnoreWebDeployment = func() testCase {
+		newTestCase := emojivoto
+		newTestCase.name = "emojivoto ignoring web deployment"
+		newTestCase.graphParams.IgnoreResources = []string{"emojivoto__web__deployment"}
+		newTestCase.graphExpect = nodegraph.Graph{
+			Spec: linkerd.GraphSpec,
+			Nodes: []nodegraph.Node{
+				{
+					"arc__failed":       float64(0),
+					"arc__success":      float64(1),
+					"detail__name":      "emoji",
+					"detail__namespace": "emojivoto",
+					"detail__type":      "deployment",
+					"id":                "emojivoto__emoji__deployment",
+					"mainStat":          "100.00%", "title": "emojivoto/emoji",
+				},
+				{
+					"arc__failed":       float64(0),
+					"arc__success":      float64(1),
+					"detail__name":      "vote-bot",
+					"detail__namespace": "emojivoto",
+					"detail__type":      "deployment",
+					"id":                "emojivoto__vote-bot__deployment",
+					"mainStat":          "100.00%",
+					"title":             "emojivoto/vote-bot",
+				},
+				{
+					"arc__failed":       float64(0),
+					"arc__success":      float64(1),
+					"detail__name":      "voting",
+					"detail__namespace": "emojivoto",
+					"detail__type":      "deployment",
+					"id":                "emojivoto__voting__deployment",
+					"mainStat":          "100.00%",
+					"title":             "emojivoto/voting",
+				},
+			},
+			Edges: []nodegraph.Edge{},
+		}
+
+		return newTestCase
+	}
+
+	emojivotoIgnoreEmojiDeployment = func() testCase {
+		newTestCase := emojivoto
+		newTestCase.name = "emojivoto ignoring emoji deployment"
+		newTestCase.graphParams.IgnoreResources = []string{"emojivoto__emoji__deployment"}
+		newTestCase.graphExpect = nodegraph.Graph{
+			Spec: linkerd.GraphSpec,
+			Nodes: []nodegraph.Node{
+				{
+					"arc__failed":       float64(0),
+					"arc__success":      float64(1),
+					"detail__name":      "vote-bot",
+					"detail__namespace": "emojivoto",
+					"detail__type":      "deployment",
+					"id":                "emojivoto__vote-bot__deployment",
+					"mainStat":          "100.00%",
+					"title":             "emojivoto/vote-bot",
+				},
+				{
+					"arc__failed":       float64(0),
+					"arc__success":      float64(1),
+					"detail__name":      "voting",
+					"detail__namespace": "emojivoto",
+					"detail__type":      "deployment",
+					"id":                "emojivoto__voting__deployment",
+					"mainStat":          "100.00%",
+					"title":             "emojivoto/voting",
+				},
+				{
+					"arc__failed":       0.18999999999999995,
+					"arc__success":      0.81,
+					"detail__name":      "web",
+					"detail__namespace": "emojivoto",
+					"detail__type":      "deployment",
+					"id":                "emojivoto__web__deployment",
+					"mainStat":          "81.00%", "title": "emojivoto/web",
+				},
+			},
+			Edges: []nodegraph.Edge{
+				{
+					"id":     "emojivoto__vote-bot__deployment__emojivoto__web__deployment",
+					"source": "emojivoto__vote-bot__deployment",
+					"target": "emojivoto__web__deployment",
+				},
+				{
+					"id":     "emojivoto__web__deployment__emojivoto__voting__deployment",
+					"source": "emojivoto__web__deployment",
+					"target": "emojivoto__voting__deployment",
+				},
+			},
+		}
+
+		return newTestCase
+	}
+
+	emojivotoIgnoreWebDeploymentNoOrphan = func() testCase {
+		newTestCase := emojivotoIgnoreWebDeployment()
+		newTestCase.name = "emojivoto ignoring web deployment without orphans"
+		newTestCase.graphParams.IgnoreResources = []string{"emojivoto__web__deployment"}
+		newTestCase.graphParams.NoOrphans = true
+		newTestCase.graphExpect.Nodes = []nodegraph.Node{}
+		newTestCase.graphExpect.Edges = []nodegraph.Edge{}
+
+		return newTestCase
 	}
 )

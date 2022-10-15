@@ -23,16 +23,22 @@ func (m mockGraphSource) Edges(ctx context.Context) (*[]linkerd.Edge, error) {
 }
 
 func Test_Graph(t *testing.T) {
-	for _, tt := range testCases {
-		edges, _ := edgesFromVec(tt.prometheusEdgesResponse)
-		nodes, _ := nodesFromVec(tt.prometheusNodesResponse)
-		stats := linkerd.Stats{mockGraphSource{edges, nodes}}
+	t.Parallel()
 
-		graph, err := stats.Graph(context.Background(), tt.graphParams)
-		if err != nil {
-			log.Fatal(err)
-		}
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			edges, _ := edgesFromVec(testCase.prometheusEdgesResponse)
+			nodes, _ := nodesFromVec(testCase.prometheusNodesResponse)
+			stats := linkerd.Stats{mockGraphSource{edges, nodes}}
 
-		assert.Equal(t, &tt.graphExpect, graph)
+			graph, err := stats.Graph(context.Background(), testCase.graphParams)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			assert.Equal(t, &testCase.graphExpect, graph)
+		})
 	}
 }

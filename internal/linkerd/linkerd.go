@@ -61,7 +61,11 @@ var (
 )
 
 func (m Stats) Graph(ctx context.Context, parameters Parameters) (*nodegraph.Graph, error) {
-	graph := nodegraph.Graph{Spec: GraphSpec}
+	graph := nodegraph.Graph{
+		Spec:  GraphSpec,
+		Nodes: []nodegraph.Node{},
+		Edges: []nodegraph.Edge{},
+	}
 
 	nodes, err := m.Server.Nodes(ctx)
 	if err != nil {
@@ -132,7 +136,7 @@ func removeOrphans(edges *[]Edge, nodes *[]Node) {
 	*nodes = newNodes
 }
 
-func removeId(id string, edges *[]Edge, nodes *[]Node) {
+func removeID(id string, edges *[]Edge, nodes *[]Node) {
 	newNodes := []Node{}
 	newEdges := []Edge{}
 
@@ -189,7 +193,7 @@ func setRoot(id string, depth int, edges *[]Edge, nodes *[]Node) {
 
 	for _, node := range *nodes {
 		if _, ok := connectedNodeIds[node.Resource.id()]; !ok {
-			removeId(node.Resource.id(), edges, nodes)
+			removeID(node.Resource.id(), edges, nodes)
 		}
 	}
 }
@@ -218,12 +222,8 @@ func findNodesConnectedTo(id string, edges []Edge) []string {
 }
 
 func runFilters(edges *[]Edge, nodes *[]Node, params Parameters) error {
-	if params.NoOrphans {
-		removeOrphans(edges, nodes)
-	}
-
 	for _, idToIgnore := range params.IgnoreResources {
-		removeId(idToIgnore, edges, nodes)
+		removeID(idToIgnore, edges, nodes)
 	}
 
 	if params.RootResource != "" {
@@ -233,6 +233,10 @@ func runFilters(edges *[]Edge, nodes *[]Node, params Parameters) error {
 		}
 
 		setRoot(params.RootResource, depth, edges, nodes)
+	}
+
+	if params.NoOrphans {
+		removeOrphans(edges, nodes)
 	}
 
 	return nil

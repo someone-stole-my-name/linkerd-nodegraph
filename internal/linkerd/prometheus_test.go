@@ -23,23 +23,37 @@ func nodesFromVec(v []model.Vector) (*[]linkerd.Node, error) {
 }
 
 func Test_Edges(t *testing.T) {
-	for _, tt := range testCases {
-		edges, err := edgesFromVec(tt.prometheusEdgesResponse)
-		if err != nil {
-			log.Fatal(err)
-		}
+	t.Parallel()
 
-		assert.Equal(t, tt.edgesExpect, edges)
+	for _, testCase := range testCases {
+		testCase := testCase
+
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			edges, err := edgesFromVec(testCase.prometheusEdgesResponse)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			assert.Equal(t, testCase.edgesExpect, edges)
+		})
 	}
 }
 
 func Test_Nodes(t *testing.T) {
-	for _, tt := range testCases {
-		nodes, err := nodesFromVec(tt.prometheusNodesResponse)
-		if err != nil {
-			log.Fatal(err)
-		}
+	t.Parallel()
 
-		assert.Equal(t, tt.nodesExpect, nodes)
+	for _, testCase := range testCases {
+		testCase := testCase
+
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			nodes, err := nodesFromVec(testCase.prometheusNodesResponse)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			assert.Equal(t, testCase.nodesExpect, nodes)
+		})
 	}
 }
