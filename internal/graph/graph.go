@@ -47,6 +47,7 @@ type Resource struct {
 
 type Node struct {
 	Resource Resource
+	Edges    []Edge
 
 	SuccessRate   float64
 	LatencyP95    float64

@@ -87,23 +87,24 @@ func (m Stats) Graph(ctx context.Context, parameters Parameters) (*nodegraph.Gra
 	seenNodes[root.Id()] = true
 	nodesToScan := []*graph.Node{root}
 
+	var edgesFunc func(context.Context, *graph.Node) ([]graph.Edge, error)
+
+	switch parameters.Direction {
+	case "inbound":
+		edgesFunc = m.Server.DownstreamEdgesOf
+	case "outbound":
+		edgesFunc = m.Server.UpstreamEdgesOf
+	default:
+		edgesFunc = m.Server.EdgesOf
+	}
+
 	for currentDepth < targetDepth {
 		currentDepth++
 
 		newNodesToScan := []*graph.Node{}
 
 		for _, node := range nodesToScan {
-			var edges []graph.Edge
-
-			switch parameters.Direction {
-			case "inbound":
-				edges, err = m.Server.DownstreamEdgesOf(ctx, node)
-			case "outbound":
-				edges, err = m.Server.UpstreamEdgesOf(ctx, node)
-			default:
-				edges, err = m.Server.EdgesOf(ctx, node)
-			}
-
+			edges, err := edgesFunc(ctx, node)
 			if err != nil {
 				return nil, fmt.Errorf("failed to obtain the list of edges: %w", err)
 			}
