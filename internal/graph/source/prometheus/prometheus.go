@@ -65,13 +65,11 @@ func (prometheus Client) query(ctx context.Context, q string) (model.Vector, err
 // Node returns the graph.Node associated with resource
 func (prometheus Client) Node(resource graph.Resource, ctx context.Context) (*graph.Node, error) {
 	var node graph.Node
-	node.Name = resource.Name
-	node.Namespace = resource.Namespace
-	node.Type = resource.Type
+	node.Resource = resource
 
 	vectorSuccessRateSingle, err := prometheus.query(ctx, fmt.Sprintf(
 		queryFormatSuccessRateSingle,
-		resource.Type.String(),
+		resource.Kind.String(),
 		resource.Name,
 		resource.Namespace),
 	)
@@ -89,24 +87,57 @@ func (prometheus Client) Node(resource graph.Resource, ctx context.Context) (*gr
 	return &node, nil
 }
 
-func (prometheus Client) EdgesOf(node *graph.Node, ctx context.Context) ([]graph.Edge, error) {
+func (prometheus Client) DownstreamEdgesOf(node *graph.Node, ctx context.Context) ([]graph.Edge, error) {
 	edges := []graph.Edge{}
 
-	vectorEdgesOfUpstreams, err := prometheus.query(ctx, fmt.Sprintf(
-		queryFormatEdgesOfUpstreams,
-		node.Type.String(),
-		node.Name,
-		node.Namespace),
+	vectorEdgesOfDownstreams, err := prometheus.query(ctx, fmt.Sprintf(
+		queryFormatEdgesOfDownstreams,
+		node.Resource.Kind.String(),
+		node.Resource.Name,
+		node.Resource.Namespace),
 	)
 	if err != nil {
 		return edges, err
 	}
 
-	vectorEdgesOfDownstreams, err := prometheus.query(ctx, fmt.Sprintf(
-		queryFormatEdgesOfDownstreams,
-		node.Type.String(),
-		node.Name,
-		node.Namespace),
+	for _, sample := range vectorEdgesOfDownstreams {
+		var resource graph.Resource
+
+		if _, ok := sample.Metric[namespaceLabel]; !ok {
+			continue
+		}
+
+		resource.Namespace = string(sample.Metric[namespaceLabel])
+
+		if v, ok := sample.Metric[deploymentLabel]; ok {
+			resource.Kind = graph.DeploymentKind
+			resource.Name = string(v)
+		} else if v, ok := sample.Metric[statefulsetLabel]; ok {
+			resource.Kind = graph.StatefulsetKind
+			resource.Name = string(v)
+		} else {
+			continue
+		}
+
+		edgeNode, err := prometheus.Node(resource, ctx)
+		if err != nil {
+			continue
+		}
+
+		edges = append(edges, graph.Edge{Source: edgeNode, Destination: node})
+	}
+
+	return edges, nil
+}
+
+func (prometheus Client) UpstreamEdgesOf(node *graph.Node, ctx context.Context) ([]graph.Edge, error) {
+	edges := []graph.Edge{}
+
+	vectorEdgesOfUpstreams, err := prometheus.query(ctx, fmt.Sprintf(
+		queryFormatEdgesOfUpstreams,
+		node.Resource.Kind.String(),
+		node.Resource.Name,
+		node.Resource.Namespace),
 	)
 	if err != nil {
 		return edges, err
@@ -122,10 +153,10 @@ func (prometheus Client) EdgesOf(node *graph.Node, ctx context.Context) ([]graph
 		resource.Namespace = string(sample.Metric[dstNamespaceLabel])
 
 		if v, ok := sample.Metric[dstDeploymentLabel]; ok {
-			resource.Type = graph.DeploymentResourceType
+			resource.Kind = graph.DeploymentKind
 			resource.Name = string(v)
 		} else if v, ok := sample.Metric[dstStatefulsetLabel]; ok {
-			resource.Type = graph.StatefulsetResourceType
+			resource.Kind = graph.StatefulsetKind
 			resource.Name = string(v)
 		} else {
 			continue
@@ -139,32 +170,25 @@ func (prometheus Client) EdgesOf(node *graph.Node, ctx context.Context) ([]graph
 		edges = append(edges, graph.Edge{Source: node, Destination: edgeNode})
 	}
 
-	for _, sample := range vectorEdgesOfDownstreams {
-		var resource graph.Resource
+	return edges, nil
+}
 
-		if _, ok := sample.Metric[namespaceLabel]; !ok {
-			continue
-		}
+func (prometheus Client) EdgesOf(node *graph.Node, ctx context.Context) ([]graph.Edge, error) {
+	edges := []graph.Edge{}
 
-		resource.Namespace = string(sample.Metric[namespaceLabel])
-
-		if v, ok := sample.Metric[deploymentLabel]; ok {
-			resource.Type = graph.DeploymentResourceType
-			resource.Name = string(v)
-		} else if v, ok := sample.Metric[statefulsetLabel]; ok {
-			resource.Type = graph.StatefulsetResourceType
-			resource.Name = string(v)
-		} else {
-			continue
-		}
-
-		edgeNode, err := prometheus.Node(resource, ctx)
-		if err != nil {
-			continue
-		}
-
-		edges = append(edges, graph.Edge{Source: edgeNode, Destination: node})
+	upstreams, err := prometheus.UpstreamEdgesOf(node, ctx)
+	if err != nil {
+		return edges, err
 	}
+
+	edges = append(edges, upstreams...)
+
+	downstreams, err := prometheus.DownstreamEdgesOf(node, ctx)
+	if err != nil {
+		return edges, err
+	}
+
+	edges = append(edges, downstreams...)
 
 	return edges, nil
 }

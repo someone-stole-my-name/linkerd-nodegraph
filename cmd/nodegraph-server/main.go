@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"linkerd-nodegraph/internal/graph/source/prometheus"
 	"linkerd-nodegraph/internal/linkerd"
 	"net/http"
 	"os"
@@ -15,7 +16,7 @@ import (
 )
 
 const (
-	timeoutDataHandler = 10 * time.Second
+	timeoutDataHandler = 60 * time.Second
 )
 
 func main() {
@@ -29,7 +30,7 @@ func main() {
 	log.SetOutput(os.Stderr)
 	log.SetLevel(log.InfoLevel)
 
-	prom, err := linkerd.NewPromGraphSource(*prometheusAddr)
+	prom, err := prometheus.NewClient(*prometheusAddr)
 	if err != nil {
 		log.Fatal(err)
 	}

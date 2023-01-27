@@ -3,32 +3,21 @@ package linkerd
 import (
 	"context"
 	"fmt"
+	"linkerd-nodegraph/internal/graph"
+	"linkerd-nodegraph/internal/graph/source/prometheus"
 	"linkerd-nodegraph/internal/nodegraph"
-
-	"github.com/prometheus/common/model"
 )
-
-type trafficDirection int
-
-const (
-	inbound trafficDirection = iota
-	outbound
-	unknown
-)
-
-type graphSource interface {
-	Nodes(ctx context.Context) (*[]Node, error)
-	Edges(ctx context.Context) (*[]Edge, error)
-}
 
 type Stats struct {
-	Server graphSource
+	Server *prometheus.Client
 }
 
 type Parameters struct {
 	Depth     int    `schema:"depth"`
+	Name      string `schema:"name"`
+	Namespace string `schema:"namespace"`
+	Kind      string `schema:"kind"`
 	Direction string `schema:"direction"`
-	Root      string `schema:"root"`
 }
 
 var GraphSpec = nodegraph.NodeFields{
@@ -59,229 +48,126 @@ var GraphSpec = nodegraph.NodeFields{
 	},
 }
 
-const (
-	namespaceLabel      = model.LabelName("namespace")
-	dstNamespaceLabel   = model.LabelName("dst_namespace")
-	deploymentLabel     = model.LabelName("deployment")
-	statefulsetLabel    = model.LabelName("statefulset")
-	dstDeploymentLabel  = model.LabelName("dst_deployment")
-	dstStatefulsetLabel = model.LabelName("dst_statefulset")
-)
-
 func (m Stats) Graph(ctx context.Context, parameters Parameters) (*nodegraph.Graph, error) {
-	graph := nodegraph.Graph{
+	nodeGraph := nodegraph.Graph{
 		Spec:  GraphSpec,
 		Nodes: []nodegraph.Node{},
 		Edges: []nodegraph.Edge{},
 	}
 
-	nodes, err := m.Server.Nodes(ctx)
+	resource := parameters.graphResource()
+
+	targetDepth := 1
+	if parameters.Depth != 0 {
+		targetDepth = parameters.Depth
+	}
+
+	root, err := m.Server.Node(resource, ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to obtain the list of nodes: %w", err)
+		return nil, fmt.Errorf("failed to obtain root node: %w", err)
 	}
 
-	edges, err := m.Server.Edges(ctx)
+	err = nodeGraph.AddNode(nodegraphNode(*root))
 	if err != nil {
-		return nil, fmt.Errorf("failed to obtain the list of edges: %w", err)
+		return nil, fmt.Errorf("failed to add root node to graph: %w", err)
 	}
 
-	addUnmeshed(edges, nodes)
-
-	if parameters.Root != "" {
-		switch parameters.Direction {
-		case "inbound":
-			setRoot(parameters.Root, parameters.Depth, edges, nodes, inbound)
-		case "outbound":
-			setRoot(parameters.Root, parameters.Depth, edges, nodes, outbound)
-		default:
-			setRoot(parameters.Root, parameters.Depth, edges, nodes, unknown)
-		}
-	} else {
-		removeOrphans(edges, nodes)
-	}
-
-	for _, node := range *nodes {
-		err := graph.AddNode(node.nodegraphNode())
-		if err != nil {
-			return nil, fmt.Errorf("failed to add node to graph: %w", err)
-		}
-	}
-
-	for _, edge := range *edges {
-		err := graph.AddEdge(edge.nodegraphEdge())
-		if err != nil {
-			return nil, fmt.Errorf("failed to add edge to graph: %w", err)
-		}
-	}
-
-	return &graph, nil
-}
-
-func addUnmeshed(edges *[]Edge, nodes *[]Node) {
-	seenIds := map[string]bool{}
-
-	for _, node := range *nodes {
-		seenIds[node.Resource.id()] = true
-	}
-
-	for _, edge := range *edges {
-		for _, resource := range []Resource{edge.Source, edge.Destination} {
-			if _, ok := seenIds[resource.id()]; !ok {
-				*nodes = append(*nodes, Node{Resource: resource})
-			}
-		}
-	}
-}
-
-func removeOrphans(edges *[]Edge, nodes *[]Node) {
-	seenIds := map[string]bool{}
-	newNodes := []Node{}
-
-	for _, edge := range *edges {
-		seenIds[edge.Destination.id()] = true
-		seenIds[edge.Source.id()] = true
-	}
-
-	for _, node := range *nodes {
-		if _, ok := seenIds[node.Resource.id()]; ok {
-			newNodes = append(newNodes, node)
-		}
-	}
-
-	*nodes = newNodes
-}
-
-func removeID(id string, edges *[]Edge, nodes *[]Node) {
-	newNodes := []Node{}
-	newEdges := []Edge{}
-
-	for _, node := range *nodes {
-		if node.Resource.id() != id {
-			newNodes = append(newNodes, node)
-		}
-	}
-
-	for _, edge := range *edges {
-		if edge.Source.id() != id && edge.Destination.id() != id {
-			newEdges = append(newEdges, edge)
-		}
-	}
-
-	*nodes = newNodes
-	*edges = newEdges
-}
-
-func setRoot(id string, depth int, edges *[]Edge, nodes *[]Node, direction trafficDirection) {
-	rootExists := false
-
-	for _, node := range *nodes {
-		if node.Resource.id() == id {
-			rootExists = true
-
-			break
-		}
-	}
-
-	if !rootExists {
-		return
-	}
-
+	seenNodes := map[string]bool{}
+	seenEdges := map[string]bool{}
 	currentDepth := 0
-	connectedNodeIds := map[string]bool{}
-	connectedNodeIds[id] = true
 
-	for currentDepth != depth {
-		iterationNodeIds := map[string]bool{}
+	seenNodes[root.Id()] = true
+	nodesToScan := []*graph.Node{root}
+
+	for currentDepth < targetDepth {
 		currentDepth++
+		newNodesToScan := []*graph.Node{}
 
-		for root := range connectedNodeIds {
-			var ids []string
-
-			switch direction {
-			case inbound:
-				ids = findInboundNodesConnectedTo(root, *edges)
-			case outbound:
-				ids = findOutboundNodesConnectedTo(root, *edges)
-			case unknown:
-				fallthrough
+		for _, node := range nodesToScan {
+			edges := []graph.Edge{}
+			switch parameters.Direction {
+			case "inbound":
+				edges, err = m.Server.DownstreamEdgesOf(node, ctx)
+			case "outbound":
+				edges, err = m.Server.UpstreamEdgesOf(node, ctx)
 			default:
-				ids = findNodesConnectedTo(root, *edges)
+				edges, err = m.Server.EdgesOf(node, ctx)
+			}
+			if err != nil {
+				return nil, fmt.Errorf("failed to obtain the list of edges: %w", err)
 			}
 
-			for _, id := range ids {
-				iterationNodeIds[id] = true
+			for _, edge := range edges {
+				if ok, _ := seenNodes[edge.Source.Id()]; !ok {
+					seenNodes[edge.Source.Id()] = true
+					err = nodeGraph.AddNode(nodegraphNode(*edge.Source))
+					newNodesToScan = append(nodesToScan, edge.Source)
+					if err != nil {
+						return nil, fmt.Errorf("failed to add node: %w", err)
+					}
+				}
+
+				if ok, _ := seenNodes[edge.Destination.Id()]; !ok {
+					seenNodes[edge.Destination.Id()] = true
+					err = nodeGraph.AddNode(nodegraphNode(*edge.Destination))
+					newNodesToScan = append(nodesToScan, edge.Destination)
+					if err != nil {
+						return nil, fmt.Errorf("failed to add node: %w", err)
+					}
+				}
+
+				if ok, _ := seenEdges[edge.Id()]; !ok {
+					seenEdges[edge.Id()] = true
+					err = nodeGraph.AddEdge(nodegraphEdge(edge))
+					if err != nil {
+						return nil, fmt.Errorf("failed to add edge: %w", err)
+					}
+				}
 			}
 		}
-
-		for id := range iterationNodeIds {
-			connectedNodeIds[id] = true
-		}
+		nodesToScan = newNodesToScan
 	}
 
-	for _, node := range *nodes {
-		if _, ok := connectedNodeIds[node.Resource.id()]; !ok {
-			removeID(node.Resource.id(), edges, nodes)
-		}
+	return &nodeGraph, nil
+}
+
+func (p Parameters) graphResource() graph.Resource {
+	resource := graph.Resource{
+		Name:      p.Name,
+		Namespace: p.Namespace,
+		Kind:      graph.KindFromString(p.Kind),
+	}
+
+	return resource
+}
+
+func nodegraphEdge(edge graph.Edge) nodegraph.Edge {
+	return nodegraph.Edge{
+		"id":     edge.Id(),
+		"source": edge.Source.Id(),
+		"target": edge.Destination.Id(),
 	}
 }
 
-func findOutboundNodesConnectedTo(id string, edges []Edge) []string {
-	nodeIdsMap := map[string]bool{}
-	nodeIds := []string{}
+func nodegraphNode(node graph.Node) nodegraph.Node {
+	var success float64 = 0
+	var failed float64 = 1
+	percent := "N/A"
 
-	for _, edge := range edges {
-		if edge.Source.id() == id {
-			if _, ok := nodeIdsMap[edge.Destination.id()]; !ok {
-				nodeIdsMap[edge.Destination.id()] = true
-			}
-		}
+	if node.SuccessRate != nil {
+		success = *node.SuccessRate
+		failed = 1 - success
+		percent = fmt.Sprintf("%.2f%%", success*100) //nolint:gomnd
 	}
 
-	for k := range nodeIdsMap {
-		nodeIds = append(nodeIds, k)
+	return nodegraph.Node{
+		"id":                node.Id(),
+		"title":             fmt.Sprintf("%s/%s", node.Resource.Namespace, node.Resource.Name),
+		"arc__failed":       failed,
+		"arc__success":      success,
+		"detail__type":      node.Resource.Kind.String(),
+		"detail__namespace": node.Resource.Namespace,
+		"detail__name":      node.Resource.Name,
+		"mainStat":          percent,
 	}
-
-	return nodeIds
-}
-
-func findInboundNodesConnectedTo(id string, edges []Edge) []string {
-	nodeIdsMap := map[string]bool{}
-	nodeIds := []string{}
-
-	for _, edge := range edges {
-		if edge.Destination.id() == id {
-			if _, ok := nodeIdsMap[edge.Source.id()]; !ok {
-				nodeIdsMap[edge.Source.id()] = true
-			}
-		}
-	}
-
-	for k := range nodeIdsMap {
-		nodeIds = append(nodeIds, k)
-	}
-
-	return nodeIds
-}
-
-func findNodesConnectedTo(id string, edges []Edge) []string {
-	nodeIdsMap := map[string]bool{}
-	nodeIds := []string{}
-
-	for _, edge := range edges {
-		if edge.Source.id() == id {
-			if _, ok := nodeIdsMap[edge.Destination.id()]; !ok {
-				nodeIdsMap[edge.Destination.id()] = true
-			}
-		} else if edge.Destination.id() == id {
-			if _, ok := nodeIdsMap[edge.Source.id()]; !ok {
-				nodeIdsMap[edge.Source.id()] = true
-			}
-		}
-	}
-
-	for k := range nodeIdsMap {
-		nodeIds = append(nodeIds, k)
-	}
-
-	return nodeIds
 }
