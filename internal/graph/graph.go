@@ -2,31 +2,33 @@ package graph
 
 import "fmt"
 
-type kind int
+type ResourceKind int
 
 const (
-	DeploymentKind kind = iota
+	DeploymentKind ResourceKind = iota
 	StatefulsetKind
 	UndefinedKind
 )
 
-var Kinds = []kind{
+var Kinds = []ResourceKind{
 	DeploymentKind,
 	StatefulsetKind,
 }
 
-func (k kind) String() string {
+func (k ResourceKind) String() string {
 	switch k {
 	case DeploymentKind:
 		return "deployment"
 	case StatefulsetKind:
 		return "statefulset"
+	case UndefinedKind:
+		fallthrough
+	default:
+		return "unknown"
 	}
-
-	return "unknown"
 }
 
-func KindFromString(k string) kind {
+func ResourceKindFromString(k string) ResourceKind {
 	switch k {
 	case "deployment":
 		return DeploymentKind
@@ -40,12 +42,15 @@ func KindFromString(k string) kind {
 type Resource struct {
 	Name      string
 	Namespace string
-	Kind      kind
+	Kind      ResourceKind
 }
 
 type Node struct {
-	Resource    Resource
-	SuccessRate *float64
+	Resource Resource
+
+	SuccessRate   float64
+	LatencyP95    float64
+	RequestVolume float64
 }
 
 type Edge struct {

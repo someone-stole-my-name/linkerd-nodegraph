@@ -23,6 +23,7 @@ func main() {
 	var logFormatter log.JSONFormatter
 
 	prometheusAddr := flag.String("prometheus-addr", "http://prometheus.default", "Address of a Prometheus server")
+	prometheusLabels := flag.String("prometheus-labels", "", "Additional labels to use as filter")
 	listenAddr := flag.String("listen-addr", ":5001", "Host/port to listen on")
 	flag.Parse()
 
@@ -30,7 +31,7 @@ func main() {
 	log.SetOutput(os.Stderr)
 	log.SetLevel(log.InfoLevel)
 
-	prom, err := prometheus.NewClient(*prometheusAddr)
+	prom, err := prometheus.NewClient(*prometheusAddr, *prometheusLabels)
 	if err != nil {
 		log.Fatal(err)
 	}

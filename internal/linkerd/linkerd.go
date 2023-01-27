@@ -8,6 +8,10 @@ import (
 	"linkerd-nodegraph/internal/nodegraph"
 )
 
+const (
+	defaultUnknownValue = "N/A"
+)
+
 type Stats struct {
 	Server *prometheus.Client
 }
@@ -30,9 +34,13 @@ var GraphSpec = nodegraph.NodeFields{
 		{Name: "id", Type: nodegraph.FieldTypeString},
 		{Name: "title", Type: nodegraph.FieldTypeString, DisplayName: "Resource"},
 		{Name: "mainStat", Type: nodegraph.FieldTypeString, DisplayName: "Success Rate"},
+		{Name: "secondaryStat", Type: nodegraph.FieldTypeString, DisplayName: "Latency"},
 		{Name: "detail__type", Type: nodegraph.FieldTypeString, DisplayName: "Type"},
 		{Name: "detail__namespace", Type: nodegraph.FieldTypeString, DisplayName: "Namespace"},
 		{Name: "detail__name", Type: nodegraph.FieldTypeString, DisplayName: "Name"},
+		{Name: "detail__successRate", Type: nodegraph.FieldTypeString, DisplayName: "Success Rate"},
+		{Name: "detail__latency_p95", Type: nodegraph.FieldTypeString, DisplayName: "p95"},
+		{Name: "detail__volume", Type: nodegraph.FieldTypeString, DisplayName: "Request volume"},
 		{
 			Name:        "arc__failed",
 			Type:        nodegraph.FieldTypeNumber,
@@ -62,7 +70,7 @@ func (m Stats) Graph(ctx context.Context, parameters Parameters) (*nodegraph.Gra
 		targetDepth = parameters.Depth
 	}
 
-	root, err := m.Server.Node(resource, ctx)
+	root, err := m.Server.Node(ctx, resource)
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain root node: %w", err)
 	}
@@ -81,43 +89,49 @@ func (m Stats) Graph(ctx context.Context, parameters Parameters) (*nodegraph.Gra
 
 	for currentDepth < targetDepth {
 		currentDepth++
+
 		newNodesToScan := []*graph.Node{}
 
 		for _, node := range nodesToScan {
-			edges := []graph.Edge{}
+			var edges []graph.Edge
+
 			switch parameters.Direction {
 			case "inbound":
-				edges, err = m.Server.DownstreamEdgesOf(node, ctx)
+				edges, err = m.Server.DownstreamEdgesOf(ctx, node)
 			case "outbound":
-				edges, err = m.Server.UpstreamEdgesOf(node, ctx)
+				edges, err = m.Server.UpstreamEdgesOf(ctx, node)
 			default:
-				edges, err = m.Server.EdgesOf(node, ctx)
+				edges, err = m.Server.EdgesOf(ctx, node)
 			}
+
 			if err != nil {
 				return nil, fmt.Errorf("failed to obtain the list of edges: %w", err)
 			}
 
 			for _, edge := range edges {
-				if ok, _ := seenNodes[edge.Source.Id()]; !ok {
+				if ok := seenNodes[edge.Source.Id()]; !ok {
+					newNodesToScan = append(newNodesToScan, edge.Source)
 					seenNodes[edge.Source.Id()] = true
+
 					err = nodeGraph.AddNode(nodegraphNode(*edge.Source))
-					newNodesToScan = append(nodesToScan, edge.Source)
 					if err != nil {
 						return nil, fmt.Errorf("failed to add node: %w", err)
 					}
 				}
 
-				if ok, _ := seenNodes[edge.Destination.Id()]; !ok {
+				if ok := seenNodes[edge.Destination.Id()]; !ok {
+					newNodesToScan = append(newNodesToScan, edge.Destination)
 					seenNodes[edge.Destination.Id()] = true
+
 					err = nodeGraph.AddNode(nodegraphNode(*edge.Destination))
-					newNodesToScan = append(nodesToScan, edge.Destination)
 					if err != nil {
 						return nil, fmt.Errorf("failed to add node: %w", err)
 					}
 				}
 
-				if ok, _ := seenEdges[edge.Id()]; !ok {
+				if ok := seenEdges[edge.Id()]; !ok {
 					seenEdges[edge.Id()] = true
+
 					err = nodeGraph.AddEdge(nodegraphEdge(edge))
 					if err != nil {
 						return nil, fmt.Errorf("failed to add edge: %w", err)
@@ -125,6 +139,7 @@ func (m Stats) Graph(ctx context.Context, parameters Parameters) (*nodegraph.Gra
 				}
 			}
 		}
+
 		nodesToScan = newNodesToScan
 	}
 
@@ -135,7 +150,7 @@ func (p Parameters) graphResource() graph.Resource {
 	resource := graph.Resource{
 		Name:      p.Name,
 		Namespace: p.Namespace,
-		Kind:      graph.KindFromString(p.Kind),
+		Kind:      graph.ResourceKindFromString(p.Kind),
 	}
 
 	return resource
@@ -150,24 +165,40 @@ func nodegraphEdge(edge graph.Edge) nodegraph.Edge {
 }
 
 func nodegraphNode(node graph.Node) nodegraph.Node {
-	var success float64 = 0
 	var failed float64 = 1
-	percent := "N/A"
 
-	if node.SuccessRate != nil {
-		success = *node.SuccessRate
+	var success float64
+
+	percent := defaultUnknownValue
+	p95 := defaultUnknownValue
+	volume := defaultUnknownValue
+
+	if node.SuccessRate != 0 {
+		success = node.SuccessRate
 		failed = 1 - success
 		percent = fmt.Sprintf("%.2f%%", success*100) //nolint:gomnd
 	}
 
+	if node.LatencyP95 != 0 {
+		p95 = fmt.Sprintf("%.1fms", node.LatencyP95)
+	}
+
+	if node.RequestVolume != 0 {
+		volume = fmt.Sprintf("%.0frd/s", node.RequestVolume)
+	}
+
 	return nodegraph.Node{
-		"id":                node.Id(),
-		"title":             fmt.Sprintf("%s/%s", node.Resource.Namespace, node.Resource.Name),
-		"arc__failed":       failed,
-		"arc__success":      success,
-		"detail__type":      node.Resource.Kind.String(),
-		"detail__namespace": node.Resource.Namespace,
-		"detail__name":      node.Resource.Name,
-		"mainStat":          percent,
+		"id":                  node.Id(),
+		"title":               fmt.Sprintf("%s/%s", node.Resource.Namespace, node.Resource.Name),
+		"arc__failed":         failed,
+		"arc__success":        success,
+		"detail__type":        node.Resource.Kind.String(),
+		"detail__namespace":   node.Resource.Namespace,
+		"detail__name":        node.Resource.Name,
+		"detail__successRate": percent,
+		"detail__latency_p95": p95,
+		"detail__volume":      volume,
+		"mainStat":            "SR: " + percent,
+		"secondaryStat":       "p95: " + p95,
 	}
 }
