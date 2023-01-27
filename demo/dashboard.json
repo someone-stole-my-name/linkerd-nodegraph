@@ -1,0 +1,228 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 1,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "hamedkarbasi93-nodegraphapi-datasource",
+        "uid": "JS1Qw0I4k"
+      },
+      "gridPos": {
+        "h": 22,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 2,
+      "targets": [
+        {
+          "datasource": {
+            "type": "hamedkarbasi93-nodegraphapi-datasource",
+            "uid": "JS1Qw0I4k"
+          },
+          "queryText": "show_unmeshed=$show_unmeshed&root_resource=$root_resource&depth=$depth&no_orphans=$no_orphans&ignore_resources=$ignore_resources",
+          "refId": "A"
+        }
+      ],
+      "title": "Linkerd Mesh",
+      "type": "nodeGraph"
+    }
+  ],
+  "schemaVersion": 37,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "false",
+          "value": "false"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Show unmeshed",
+        "multi": false,
+        "name": "show_unmeshed",
+        "options": [
+          {
+            "selected": false,
+            "text": "true",
+            "value": "true"
+          },
+          {
+            "selected": true,
+            "text": "false",
+            "value": "false"
+          }
+        ],
+        "query": "true,false",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "2",
+          "value": "2"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Graph depth",
+        "multi": false,
+        "name": "depth",
+        "options": [
+          {
+            "selected": false,
+            "text": "1",
+            "value": "1"
+          },
+          {
+            "selected": true,
+            "text": "2",
+            "value": "2"
+          },
+          {
+            "selected": false,
+            "text": "3",
+            "value": "3"
+          },
+          {
+            "selected": false,
+            "text": "4",
+            "value": "4"
+          },
+          {
+            "selected": false,
+            "text": "5",
+            "value": "5"
+          },
+          {
+            "selected": false,
+            "text": "6",
+            "value": "6"
+          },
+          {
+            "selected": false,
+            "text": "7",
+            "value": "7"
+          },
+          {
+            "selected": false,
+            "text": "8",
+            "value": "8"
+          },
+          {
+            "selected": false,
+            "text": "9",
+            "value": "9"
+          },
+          {
+            "selected": false,
+            "text": "10",
+            "value": "10"
+          }
+        ],
+        "query": "1,2,3,4,5,6,7,8,9,10",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "true",
+          "value": "true"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "No Orphan nodes",
+        "multi": false,
+        "name": "no_orphans",
+        "options": [
+          {
+            "selected": true,
+            "text": "true",
+            "value": "true"
+          },
+          {
+            "selected": false,
+            "text": "false",
+            "value": "false"
+          }
+        ],
+        "query": "true,false",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "support__support__deployment",
+          "value": "support__support__deployment"
+        },
+        "hide": 0,
+        "label": "Root resource",
+        "name": "root_resource",
+        "options": [
+          {
+            "selected": true,
+            "text": "support__support__deployment",
+            "value": "support__support__deployment"
+          }
+        ],
+        "query": "support__support__deployment",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {},
+        "hide": 0,
+        "label": "Ignore resources",
+        "name": "ignore_resources",
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "New dashboard",
+  "uid": "rSZbXAIVk",
+  "version": 2,
+  "weekStart": ""
+}

@@ -2,9 +2,18 @@ package linkerd
 
 import (
 	"context"
+	"fmt"
 	"linkerd-nodegraph/internal/nodegraph"
 
 	"github.com/prometheus/common/model"
+)
+
+type trafficDirection int
+
+const (
+	inbound trafficDirection = iota
+	outbound
+	unknown
 )
 
 type graphSource interface {
@@ -17,42 +26,40 @@ type Stats struct {
 }
 
 type Parameters struct {
-	Depth           int      `schema:"depth"`
-	IgnoreResources []string `schema:"ignore_resources"`
-	RootResource    string   `schema:"root_resource"`
-	NoOrphans       bool     `schema:"no_orphans"`
-	ShowUnmeshed    bool     `schema:"show_unmeshed"`
+	Depth     int    `schema:"depth"`
+	Direction string `schema:"direction"`
+	Root      string `schema:"root"`
 }
 
-var (
-	GraphSpec = nodegraph.NodeFields{
-		Edge: []nodegraph.Field{
-			{Name: "id", Type: nodegraph.FieldTypeString},
-			{Name: "source", Type: nodegraph.FieldTypeString},
-			{Name: "target", Type: nodegraph.FieldTypeString},
+var GraphSpec = nodegraph.NodeFields{
+	Edge: []nodegraph.Field{
+		{Name: "id", Type: nodegraph.FieldTypeString},
+		{Name: "source", Type: nodegraph.FieldTypeString},
+		{Name: "target", Type: nodegraph.FieldTypeString},
+	},
+	Node: []nodegraph.Field{
+		{Name: "id", Type: nodegraph.FieldTypeString},
+		{Name: "title", Type: nodegraph.FieldTypeString, DisplayName: "Resource"},
+		{Name: "mainStat", Type: nodegraph.FieldTypeString, DisplayName: "Success Rate"},
+		{Name: "detail__type", Type: nodegraph.FieldTypeString, DisplayName: "Type"},
+		{Name: "detail__namespace", Type: nodegraph.FieldTypeString, DisplayName: "Namespace"},
+		{Name: "detail__name", Type: nodegraph.FieldTypeString, DisplayName: "Name"},
+		{
+			Name:        "arc__failed",
+			Type:        nodegraph.FieldTypeNumber,
+			Color:       "red",
+			DisplayName: "Failed",
 		},
-		Node: []nodegraph.Field{
-			{Name: "id", Type: nodegraph.FieldTypeString},
-			{Name: "title", Type: nodegraph.FieldTypeString, DisplayName: "Resource"},
-			{Name: "mainStat", Type: nodegraph.FieldTypeString, DisplayName: "Success Rate"},
-			{Name: "detail__type", Type: nodegraph.FieldTypeString, DisplayName: "Type"},
-			{Name: "detail__namespace", Type: nodegraph.FieldTypeString, DisplayName: "Namespace"},
-			{Name: "detail__name", Type: nodegraph.FieldTypeString, DisplayName: "Name"},
-			{
-				Name:        "arc__failed",
-				Type:        nodegraph.FieldTypeNumber,
-				Color:       "red",
-				DisplayName: "Failed",
-			},
-			{
-				Name:        "arc__success",
-				Type:        nodegraph.FieldTypeNumber,
-				Color:       "green",
-				DisplayName: "Success",
-			},
+		{
+			Name:        "arc__success",
+			Type:        nodegraph.FieldTypeNumber,
+			Color:       "green",
+			DisplayName: "Success",
 		},
-	}
+	},
+}
 
+const (
 	namespaceLabel      = model.LabelName("namespace")
 	dstNamespaceLabel   = model.LabelName("dst_namespace")
 	deploymentLabel     = model.LabelName("deployment")
@@ -70,30 +77,40 @@ func (m Stats) Graph(ctx context.Context, parameters Parameters) (*nodegraph.Gra
 
 	nodes, err := m.Server.Nodes(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to obtain the list of nodes: %w", err)
 	}
 
 	edges, err := m.Server.Edges(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to obtain the list of edges: %w", err)
 	}
 
-	err = runFilters(edges, nodes, parameters)
-	if err != nil {
-		return nil, err
+	addUnmeshed(edges, nodes)
+
+	if parameters.Root != "" {
+		switch parameters.Direction {
+		case "inbound":
+			setRoot(parameters.Root, parameters.Depth, edges, nodes, inbound)
+		case "outbound":
+			setRoot(parameters.Root, parameters.Depth, edges, nodes, outbound)
+		default:
+			setRoot(parameters.Root, parameters.Depth, edges, nodes, unknown)
+		}
+	} else {
+		removeOrphans(edges, nodes)
 	}
 
 	for _, node := range *nodes {
 		err := graph.AddNode(node.nodegraphNode())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to add node to graph: %w", err)
 		}
 	}
 
 	for _, edge := range *edges {
 		err := graph.AddEdge(edge.nodegraphEdge())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to add edge to graph: %w", err)
 		}
 	}
 
@@ -114,34 +131,6 @@ func addUnmeshed(edges *[]Edge, nodes *[]Node) {
 			}
 		}
 	}
-}
-
-func cleanupUnmeshed(edges *[]Edge, nodes *[]Node) {
-	seenIds := map[string]bool{}
-	newEdges := []Edge{}
-
-	for _, node := range *nodes {
-		seenIds[node.Resource.id()] = true
-	}
-
-	for _, edge := range *edges {
-		validSource := false
-		validDestination := false
-
-		if _, ok := seenIds[edge.Source.id()]; ok {
-			validSource = true
-		}
-
-		if _, ok := seenIds[edge.Destination.id()]; ok {
-			validDestination = true
-		}
-
-		if validDestination && validSource {
-			newEdges = append(newEdges, edge)
-		}
-	}
-
-	*edges = newEdges
 }
 
 func removeOrphans(edges *[]Edge, nodes *[]Node) {
@@ -182,7 +171,7 @@ func removeID(id string, edges *[]Edge, nodes *[]Node) {
 	*edges = newEdges
 }
 
-func setRoot(id string, depth int, edges *[]Edge, nodes *[]Node) {
+func setRoot(id string, depth int, edges *[]Edge, nodes *[]Node, direction trafficDirection) {
 	rootExists := false
 
 	for _, node := range *nodes {
@@ -206,7 +195,19 @@ func setRoot(id string, depth int, edges *[]Edge, nodes *[]Node) {
 		currentDepth++
 
 		for root := range connectedNodeIds {
-			ids := findNodesConnectedTo(root, *edges)
+			var ids []string
+
+			switch direction {
+			case inbound:
+				ids = findInboundNodesConnectedTo(root, *edges)
+			case outbound:
+				ids = findOutboundNodesConnectedTo(root, *edges)
+			case unknown:
+				fallthrough
+			default:
+				ids = findNodesConnectedTo(root, *edges)
+			}
+
 			for _, id := range ids {
 				iterationNodeIds[id] = true
 			}
@@ -222,6 +223,44 @@ func setRoot(id string, depth int, edges *[]Edge, nodes *[]Node) {
 			removeID(node.Resource.id(), edges, nodes)
 		}
 	}
+}
+
+func findOutboundNodesConnectedTo(id string, edges []Edge) []string {
+	nodeIdsMap := map[string]bool{}
+	nodeIds := []string{}
+
+	for _, edge := range edges {
+		if edge.Source.id() == id {
+			if _, ok := nodeIdsMap[edge.Destination.id()]; !ok {
+				nodeIdsMap[edge.Destination.id()] = true
+			}
+		}
+	}
+
+	for k := range nodeIdsMap {
+		nodeIds = append(nodeIds, k)
+	}
+
+	return nodeIds
+}
+
+func findInboundNodesConnectedTo(id string, edges []Edge) []string {
+	nodeIdsMap := map[string]bool{}
+	nodeIds := []string{}
+
+	for _, edge := range edges {
+		if edge.Destination.id() == id {
+			if _, ok := nodeIdsMap[edge.Source.id()]; !ok {
+				nodeIdsMap[edge.Source.id()] = true
+			}
+		}
+	}
+
+	for k := range nodeIdsMap {
+		nodeIds = append(nodeIds, k)
+	}
+
+	return nodeIds
 }
 
 func findNodesConnectedTo(id string, edges []Edge) []string {
@@ -245,26 +284,4 @@ func findNodesConnectedTo(id string, edges []Edge) []string {
 	}
 
 	return nodeIds
-}
-
-func runFilters(edges *[]Edge, nodes *[]Node, params Parameters) error {
-	if params.ShowUnmeshed {
-		addUnmeshed(edges, nodes)
-	} else {
-		cleanupUnmeshed(edges, nodes)
-	}
-
-	for _, idToIgnore := range params.IgnoreResources {
-		removeID(idToIgnore, edges, nodes)
-	}
-
-	if params.RootResource != "" {
-		setRoot(params.RootResource, params.Depth, edges, nodes)
-	}
-
-	if params.NoOrphans {
-		removeOrphans(edges, nodes)
-	}
-
-	return nil
 }

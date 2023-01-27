@@ -14,14 +14,18 @@ import (
 	"github.com/gorilla/schema"
 )
 
-var decoder = schema.NewDecoder()
+const (
+	timeoutDataHandler = 10 * time.Second
+)
 
 func main() {
-	prometheusAddr := flag.String("prometheus-addr", "http://prometheus.default", "Address of the Prometheus server")
+	var logFormatter log.JSONFormatter
+
+	prometheusAddr := flag.String("prometheus-addr", "http://prometheus.default", "Address of a Prometheus server")
 	listenAddr := flag.String("listen-addr", ":5001", "Host/port to listen on")
 	flag.Parse()
 
-	log.SetFormatter(&log.JSONFormatter{})
+	log.SetFormatter(&logFormatter)
 	log.SetOutput(os.Stderr)
 	log.SetLevel(log.InfoLevel)
 
@@ -36,7 +40,13 @@ func main() {
 
 	http.HandleFunc("/api/graph/fields", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(linkerd.GraphSpec)
+		err := json.NewEncoder(w).Encode(linkerd.GraphSpec)
+		if err != nil {
+			log.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+
+			return
+		}
 	})
 
 	http.HandleFunc("/api/graph/data", data(linkerd.Stats{Server: prom}))
@@ -61,6 +71,8 @@ func data(stats linkerd.Stats) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var params linkerd.Parameters
 
+		decoder := schema.NewDecoder()
+
 		err := decoder.Decode(&params, r.URL.Query())
 		if err != nil {
 			log.Error(err)
@@ -69,7 +81,7 @@ func data(stats linkerd.Stats) func(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), timeoutDataHandler)
 		defer cancel()
 
 		graph, err := stats.Graph(ctx, params)
@@ -81,6 +93,13 @@ func data(stats linkerd.Stats) func(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(graph)
+
+		err = json.NewEncoder(w).Encode(graph)
+		if err != nil {
+			log.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+
+			return
+		}
 	}
 }
