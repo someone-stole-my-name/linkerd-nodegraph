@@ -15,23 +15,26 @@ import (
 	"github.com/gorilla/schema"
 )
 
-const (
-	timeoutDataHandler = 60 * time.Second
-)
+var timeoutDataHandler = 60 * time.Second
 
 func main() {
 	var logFormatter log.JSONFormatter
 
 	prometheusAddr := flag.String("prometheus-addr", "http://prometheus.default", "Address of a Prometheus server")
 	prometheusLabels := flag.String("prometheus-labels", "", "Additional labels to use as filter")
+	prometheusTimeout := flag.Duration("prometheus-timeout", timeoutDataHandler, "Timeout for requests to Prometheus")
+	prometheusHeaders := flag.String("prometheus-headers", "", "Additional headers to use in requests to prometheus")
+
 	listenAddr := flag.String("listen-addr", ":5001", "Host/port to listen on")
 	flag.Parse()
+
+	timeoutDataHandler = *prometheusTimeout
 
 	log.SetFormatter(&logFormatter)
 	log.SetOutput(os.Stderr)
 	log.SetLevel(log.InfoLevel)
 
-	prom, err := prometheus.NewClient(*prometheusAddr, *prometheusLabels)
+	prom, err := prometheus.NewClient(*prometheusAddr, *prometheusLabels, *prometheusHeaders)
 	if err != nil {
 		log.Fatal(err)
 	}

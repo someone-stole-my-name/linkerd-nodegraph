@@ -22,6 +22,8 @@ type Parameters struct {
 	Namespace string `schema:"namespace"`
 	Kind      string `schema:"kind"`
 	Direction string `schema:"direction"`
+	From      int64  `schema:"from"`
+	To        int64  `schema:"to"`
 }
 
 var GraphSpec = nodegraph.NodeFields{
@@ -70,10 +72,12 @@ func (m Stats) Graph(ctx context.Context, parameters Parameters) (*nodegraph.Gra
 		targetDepth = parameters.Depth
 	}
 
-	root, err := m.Server.Node(ctx, resource)
+	b, err := m.Server.NewBuilder().Build(ctx, parameters.From, parameters.To)
 	if err != nil {
-		return nil, fmt.Errorf("failed to obtain root node: %w", err)
+		return nil, fmt.Errorf("failed to create builder: %w", err)
 	}
+
+	root := b.Node(ctx, resource)
 
 	err = nodeGraph.AddNode(nodegraphNode(*root))
 	if err != nil {
@@ -84,18 +88,18 @@ func (m Stats) Graph(ctx context.Context, parameters Parameters) (*nodegraph.Gra
 	seenEdges := map[string]bool{}
 	currentDepth := 0
 
-	seenNodes[root.Id()] = true
+	seenNodes[root.ID()] = true
 	nodesToScan := []*graph.Node{root}
 
-	var edgesFunc func(context.Context, *graph.Node) ([]graph.Edge, error)
+	var edgesFunc func(context.Context, *graph.Node) []graph.Edge
 
 	switch parameters.Direction {
 	case "inbound":
-		edgesFunc = m.Server.DownstreamEdgesOf
+		edgesFunc = b.DownstreamEdgesOf
 	case "outbound":
-		edgesFunc = m.Server.UpstreamEdgesOf
+		edgesFunc = b.UpstreamEdgesOf
 	default:
-		edgesFunc = m.Server.EdgesOf
+		edgesFunc = b.EdgesOf
 	}
 
 	for currentDepth < targetDepth {
@@ -104,15 +108,12 @@ func (m Stats) Graph(ctx context.Context, parameters Parameters) (*nodegraph.Gra
 		newNodesToScan := []*graph.Node{}
 
 		for _, node := range nodesToScan {
-			edges, err := edgesFunc(ctx, node)
-			if err != nil {
-				return nil, fmt.Errorf("failed to obtain the list of edges: %w", err)
-			}
+			edges := edgesFunc(ctx, node)
 
 			for _, edge := range edges {
-				if ok := seenNodes[edge.Source.Id()]; !ok {
+				if ok := seenNodes[edge.Source.ID()]; !ok {
 					newNodesToScan = append(newNodesToScan, edge.Source)
-					seenNodes[edge.Source.Id()] = true
+					seenNodes[edge.Source.ID()] = true
 
 					err = nodeGraph.AddNode(nodegraphNode(*edge.Source))
 					if err != nil {
@@ -120,9 +121,9 @@ func (m Stats) Graph(ctx context.Context, parameters Parameters) (*nodegraph.Gra
 					}
 				}
 
-				if ok := seenNodes[edge.Destination.Id()]; !ok {
+				if ok := seenNodes[edge.Destination.ID()]; !ok {
 					newNodesToScan = append(newNodesToScan, edge.Destination)
-					seenNodes[edge.Destination.Id()] = true
+					seenNodes[edge.Destination.ID()] = true
 
 					err = nodeGraph.AddNode(nodegraphNode(*edge.Destination))
 					if err != nil {
@@ -130,8 +131,8 @@ func (m Stats) Graph(ctx context.Context, parameters Parameters) (*nodegraph.Gra
 					}
 				}
 
-				if ok := seenEdges[edge.Id()]; !ok {
-					seenEdges[edge.Id()] = true
+				if ok := seenEdges[edge.ID()]; !ok {
+					seenEdges[edge.ID()] = true
 
 					err = nodeGraph.AddEdge(nodegraphEdge(edge))
 					if err != nil {
@@ -159,9 +160,9 @@ func (p Parameters) graphResource() graph.Resource {
 
 func nodegraphEdge(edge graph.Edge) nodegraph.Edge {
 	return nodegraph.Edge{
-		"id":     edge.Id(),
-		"source": edge.Source.Id(),
-		"target": edge.Destination.Id(),
+		"id":     edge.ID(),
+		"source": edge.Source.ID(),
+		"target": edge.Destination.ID(),
 	}
 }
 
@@ -189,7 +190,7 @@ func nodegraphNode(node graph.Node) nodegraph.Node {
 	}
 
 	return nodegraph.Node{
-		"id":                  node.Id(),
+		"id":                  node.ID(),
 		"title":               fmt.Sprintf("%s/%s", node.Resource.Namespace, node.Resource.Name),
 		"arc__failed":         failed,
 		"arc__success":        success,

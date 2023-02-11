@@ -10,7 +10,7 @@ const (
 	UndefinedKind
 )
 
-var Kinds = []ResourceKind{
+var ResourceKinds = []ResourceKind{
 	DeploymentKind,
 	StatefulsetKind,
 }
@@ -47,7 +47,6 @@ type Resource struct {
 
 type Node struct {
 	Resource Resource
-	Edges    []Edge
 
 	SuccessRate   float64
 	LatencyP95    float64
@@ -59,10 +58,10 @@ type Edge struct {
 	Destination *Node
 }
 
-func (n Node) Id() string {
+func (n Node) ID() string {
 	return fmt.Sprintf("%s__%s__%s", n.Resource.Namespace, n.Resource.Name, n.Resource.Kind.String())
 }
 
-func (e Edge) Id() string {
-	return fmt.Sprintf("%s__%s", e.Source.Id(), e.Destination.Id())
+func (e Edge) ID() string {
+	return fmt.Sprintf("%s__%s", e.Source.ID(), e.Destination.ID())
 }
