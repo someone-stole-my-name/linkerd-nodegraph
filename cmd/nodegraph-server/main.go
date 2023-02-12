@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"linkerd-nodegraph/internal/config"
 	"linkerd-nodegraph/internal/graph/source/prometheus"
 	"linkerd-nodegraph/internal/linkerd"
 	"net/http"
@@ -20,21 +21,21 @@ var timeoutDataHandler = 60 * time.Second
 func main() {
 	var logFormatter log.JSONFormatter
 
-	prometheusAddr := flag.String("prometheus-addr", "http://prometheus.default", "Address of a Prometheus server")
-	prometheusLabels := flag.String("prometheus-labels", "", "Additional labels to use as filter")
-	prometheusTimeout := flag.Duration("prometheus-timeout", timeoutDataHandler, "Timeout for requests to Prometheus")
-	prometheusHeaders := flag.String("prometheus-headers", "", "Additional headers to use in requests to prometheus")
-
-	listenAddr := flag.String("listen-addr", ":5001", "Host/port to listen on")
+	configFile := flag.String("config-file", "./config.yaml", "Config file")
 	flag.Parse()
 
-	timeoutDataHandler = *prometheusTimeout
+	config, err := config.FromFile(*configFile)
+	if err != nil {
+		panic(err)
+	}
+
+	timeoutDataHandler = config.Server.Timeout
 
 	log.SetFormatter(&logFormatter)
 	log.SetOutput(os.Stderr)
 	log.SetLevel(log.InfoLevel)
 
-	prom, err := prometheus.NewClient(*prometheusAddr, *prometheusLabels, *prometheusHeaders)
+	prom, err := prometheus.NewClient(config.Prometheus.HTTP.Addr, config.Prometheus.Labels, config.Prometheus.HTTP.Headers)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -56,7 +57,7 @@ func main() {
 
 	http.HandleFunc("/api/graph/data", data(linkerd.Stats{Server: prom}))
 
-	err = http.ListenAndServe(*listenAddr, func(handler http.Handler) http.Handler {
+	err = http.ListenAndServe(config.Server.Addr, func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(log.Fields{
 				"address": r.RemoteAddr,

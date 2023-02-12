@@ -8,6 +8,7 @@ require (
 	github.com/prometheus/common v0.37.0
 	github.com/sirupsen/logrus v1.6.0
 	github.com/stretchr/testify v1.4.0
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
@@ -18,5 +19,4 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

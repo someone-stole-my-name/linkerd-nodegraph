@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/prometheus/client_golang/api"
 	prom "github.com/prometheus/client_golang/api/prometheus/v1"
@@ -24,24 +23,11 @@ type roundTripper struct {
 	headers map[string]string
 }
 
-func NewClient(address string, labels string, headers string) (*Client, error) {
-	headersMap := make(map[string]string)
-
-	if len(headers) != 0 {
-		for _, header := range strings.Split(headers, ",") {
-			kv := strings.Split(header, "=")
-			if len(kv) != 2 {
-				return nil, fmt.Errorf("expected key value found: %v", kv)
-			}
-
-			headersMap[kv[0]] = kv[1]
-		}
-	}
-
+func NewClient(address string, labels string, headers map[string]string) (*Client, error) {
 	c, err := api.NewClient(api.Config{
 		Address: address,
 		RoundTripper: &roundTripper{
-			headers: headersMap,
+			headers: headers,
 		},
 	})
 	if err != nil {
