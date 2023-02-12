@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 
@@ -20,29 +21,42 @@ type Client struct {
 }
 
 type roundTripper struct {
-	headers map[string]string
+	headers   map[string]string
+	transport http.RoundTripper
 }
 
-func NewClient(address string, labels string, headers map[string]string) (*Client, error) {
+type Config struct {
+	Address   string
+	Labels    string
+	Headers   map[string]string
+	TLSConfig *tls.Config
+}
+
+func NewClient(config Config) (*Client, error) {
 	c, err := api.NewClient(api.Config{
-		Address: address,
-		RoundTripper: &roundTripper{
-			headers: headers,
+		Address: config.Address,
+		Client: &http.Client{
+			Transport: &roundTripper{
+				headers: config.Headers,
+				transport: &http.Transport{
+					TLSClientConfig: config.TLSConfig,
+				},
+			},
 		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error creating prometheus client: %w", err)
 	}
 
-	if labels != "" && labels != " " {
-		labels = "," + labels
+	if config.Labels != "" && config.Labels != " " {
+		config.Labels = "," + config.Labels
 	} else {
-		labels = " "
+		config.Labels = " "
 	}
 
 	return &Client{
 		API:    prom.NewAPI(c),
-		Labels: labels,
+		Labels: config.Labels,
 	}, nil
 }
 
@@ -51,5 +65,5 @@ func (t *roundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 		r.Header.Set(k, v)
 	}
 
-	return http.DefaultTransport.RoundTrip(r)
+	return t.transport.RoundTrip(r)
 }

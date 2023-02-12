@@ -1,8 +1,11 @@
 package config
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
+	"linkerd-nodegraph/internal/graph/source/prometheus"
 	"os"
 	"time"
 
@@ -22,7 +25,10 @@ const (
 )
 
 type TLSConfig struct {
-	InsecureSkipVerify bool `yaml:"insecureSkipVerify"`
+	InsecureSkipVerify bool   `yaml:"insecureSkipVerify"`
+	CAFile             string `yaml:"caFile"`
+	CertFile           string `yaml:"certFile"`
+	KeyFile            string `yaml:"keyFile"`
 }
 
 type HTTP struct {
@@ -92,4 +98,37 @@ func FromFile(path string) (*Config, error) {
 	}
 
 	return FromReader(reader)
+}
+
+func (c *Prometheus) Config() (*prometheus.Config, error) {
+	tlsConfig := tls.Config{
+		InsecureSkipVerify: c.HTTP.TLSConfig.InsecureSkipVerify,
+	}
+
+	if c.HTTP.TLSConfig.CAFile != "" {
+		caBytes, err := os.ReadFile(c.HTTP.TLSConfig.CAFile)
+		if err != nil {
+			return nil, fmt.Errorf("could not open ca file: %w", err)
+		}
+
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caBytes)
+		tlsConfig.RootCAs = caCertPool
+	}
+
+	if c.HTTP.TLSConfig.CertFile != "" && c.HTTP.TLSConfig.KeyFile != "" {
+		certificate, err := tls.LoadX509KeyPair(c.HTTP.TLSConfig.CertFile, c.HTTP.TLSConfig.KeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("could not load certificate: %w", err)
+		}
+
+		tlsConfig.Certificates = []tls.Certificate{certificate}
+	}
+
+	return &prometheus.Config{
+		Address:   c.HTTP.Addr,
+		Labels:    c.Labels,
+		Headers:   c.HTTP.Headers,
+		TLSConfig: &tlsConfig,
+	}, nil
 }

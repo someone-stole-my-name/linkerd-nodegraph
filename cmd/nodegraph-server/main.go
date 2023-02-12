@@ -35,7 +35,12 @@ func main() {
 	log.SetOutput(os.Stderr)
 	log.SetLevel(log.InfoLevel)
 
-	prom, err := prometheus.NewClient(config.Prometheus.HTTP.Addr, config.Prometheus.Labels, config.Prometheus.HTTP.Headers)
+	promConfig, err := config.Prometheus.Config()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	prom, err := prometheus.NewClient(*promConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
